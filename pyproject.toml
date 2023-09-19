@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "semsis"
+version = "0.1.0"
+description = "A libary for semantic similarity search"
+authors = ["Hiroyuki Deguchi <deguchi.hiroyuki.db0@is.naist.jp>"]
+readme = "README.rst"
+
+[tool.poetry.dependencies]
+python = "^3.8.1"
+torch = "2.0.0"
+transformers = "^4.33.2"
+sentence-transformers = "^2.2.2"
+h5py = "^3.9.0"
+
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.9.1"
+isort = "^5.12.0"
+flake8 = "^6.1.0"
+mypy = "^1.5.1"
+pytest = "^7.4.2"
+pytest-cov = "^4.1.0"
+
+[tool.coverage.run]
+omit = ["*_test.py"]
+
+[tool.isort]
+profile = "black"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

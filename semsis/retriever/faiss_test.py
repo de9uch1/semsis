@@ -113,6 +113,52 @@ class TestRetrieverFaiss:
                 assert isinstance(index, faiss.IndexIDMap)
                 assert isinstance(faiss.downcast_index(index.index), faiss.IndexFlat)
 
+    @pytest.mark.parametrize("hnsw_edges", [0, 4])
+    @pytest.mark.parametrize("ivf_lists", [0, nlists])
+    @pytest.mark.parametrize("opq", [False, True])
+    def test_set_nprobe(self, hnsw_edges: int, ivf_lists: int, opq: bool):
+        retriever = RetrieverFaiss.new(
+            RetrieverFaiss.Config(
+                D, hnsw_edges=hnsw_edges, ivf_lists=ivf_lists, opq=opq
+            )
+        )
+        index = retriever.index
+        if ivf_lists > 0:
+            assert faiss.extract_index_ivf(index).nprobe == 1
+            retriever.set_nprobe(8)
+            assert faiss.extract_index_ivf(index).nprobe == 8
+        else:
+            # Do nothing
+            retriever.set_nprobe(8)
+
+    @pytest.mark.parametrize("hnsw_edges", [0, 4])
+    @pytest.mark.parametrize("ivf_lists", [0, nlists])
+    @pytest.mark.parametrize("opq", [False, True])
+    def test_set_efsearch(self, hnsw_edges: int, ivf_lists: int, opq: bool):
+        retriever = RetrieverFaiss.new(
+            RetrieverFaiss.Config(
+                D, hnsw_edges=hnsw_edges, ivf_lists=ivf_lists, opq=opq
+            )
+        )
+        index = retriever.index
+        if hnsw_edges > 0:
+            if ivf_lists > 0:
+                hnsw = faiss.downcast_index(
+                    faiss.extract_index_ivf(index).quantizer
+                ).hnsw
+            else:
+                if opq:
+                    idmap = faiss.downcast_index(index.index)
+                else:
+                    idmap = index
+                hnsw = faiss.downcast_index(idmap.index).hnsw
+            assert hnsw.efSearch == 16
+            retriever.set_efsearch(64)
+            assert hnsw.efSearch == 64
+        else:
+            # Do nothing
+            retriever.set_efsearch(64)
+
     @pytest.mark.parametrize("metric", ["l2", "ip", "cos"])
     @pytest.mark.parametrize("dtype", [np.float32, np.float16])
     def test_normalize(self, metric: str, dtype, v: np.ndarray):

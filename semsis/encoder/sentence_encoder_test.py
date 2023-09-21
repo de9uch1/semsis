@@ -81,21 +81,15 @@ class TestSentenceEncoder:
         assert not mock_encoder.training
 
     @pytest.mark.parametrize("name_or_path", [BERT, SBERT])
-    @pytest.mark.parametrize("representation", [None, "avg", "cls"])
-    def test_build(self, name_or_path: str, representation: Optional[str]):
-        if not name_or_path.startswith("sentence-transformers/") and (
-            representation is None or representation not in {"avg", "cls"}
-        ):
-            with pytest.raises(NotImplementedError):
-                SentenceEncoderMock.build(name_or_path, representation)
-        else:
-            encoder = SentenceEncoderMock.build(name_or_path, representation)
-            if name_or_path.startswith(r"sentence-transformers/"):
-                assert isinstance(encoder, SentenceEncoderSbert)
-            elif representation == "avg":
-                assert isinstance(encoder, SentenceEncoderAvg)
-            elif representation == "cls":
-                assert isinstance(encoder, SentenceEncoderCls)
+    @pytest.mark.parametrize("representation", ["sbert", "avg", "cls"])
+    def test_build(self, name_or_path: str, representation: str):
+        encoder = SentenceEncoderMock.build(name_or_path, representation)
+        if representation == "sbert":
+            assert isinstance(encoder, SentenceEncoderSbert)
+        elif representation == "avg":
+            assert isinstance(encoder, SentenceEncoderAvg)
+        elif representation == "cls":
+            assert isinstance(encoder, SentenceEncoderCls)
 
     def test_encode(self, mock_encoder):
         examples = ["I like apples.", "This is my pen.", "I like apples."]

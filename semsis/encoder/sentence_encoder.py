@@ -46,18 +46,18 @@ class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
     def build(
         cls,
         model_name_or_path: str,
-        representation: Optional[Literal["avg", "cls"]] = None,
+        representation: Literal["avg", "cls", "sbert"],
     ) -> "SentenceEncoder":
         """Build the sentence encoder model.
 
         Args:
             model_name_or_path (str): Model name or path of huggingface transformer models.
-            representation (Literal["avg", "cls"], optional): Type of the sentence representation.
+            representation (Literal["avg", "cls", "sbert"]): Type of the sentence representation.
 
         Returns:
             SentenceEncoder: This class.
         """
-        if model_name_or_path.startswith("sentence-transformers/"):
+        if representation == "sbert":
             return SentenceEncoderSbert(model_name_or_path)
         elif representation == "avg":
             return SentenceEncoderAvg(model_name_or_path)

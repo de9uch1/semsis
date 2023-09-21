@@ -1,4 +1,5 @@
 import contextlib
+from os import PathLike
 from typing import Any, Generator, Optional
 
 import h5py
@@ -64,11 +65,11 @@ class KVStore:
 
     @classmethod
     @contextlib.contextmanager
-    def open(cls, path: str, mode: str = "r") -> Generator["KVStore", Any, None]:
+    def open(cls, path: PathLike, mode: str = "r") -> Generator["KVStore", Any, None]:
         """Open a binary file of this kvstore.
 
         Args:
-            path (str): A path to the file.
+            path (os.PathLike): A path to the file.
             mode (str): Mode of this file objects.
               See https://docs.h5py.org/en/stable/high/file.html
 

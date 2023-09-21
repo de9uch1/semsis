@@ -56,7 +56,7 @@ class Retriever(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def new(cls, cfg: "Config"):
+    def build(cls, cfg: "Config"):
         """Build this class from the given configuration.
 
 

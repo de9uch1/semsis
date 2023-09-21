@@ -18,7 +18,7 @@ class RetrieverMock(Retriever):
         ...
 
     @classmethod
-    def new(cls, cfg: "Retriever.Config"):
+    def build(cls, cfg: "Retriever.Config"):
         ...
 
     def normalize(self, vectors: np.ndarray) -> np.ndarray:

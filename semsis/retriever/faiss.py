@@ -91,7 +91,7 @@ class RetrieverFaiss(Retriever):
         return self.index.ntotal
 
     @classmethod
-    def new(cls, cfg: "Config") -> "RetrieverFaiss":
+    def build(cls, cfg: "Config") -> "RetrieverFaiss":
         """Build this class from the given configuration.
 
         Args:

@@ -76,7 +76,7 @@ class TestRetrieverFaiss:
     @pytest.mark.parametrize("opq", [False, True])
     @pytest.mark.parametrize("pca", [False, True])
     @pytest.mark.parametrize("pca_dim", [0, 4])
-    def test_new(self, metric: str, opq: bool, pca: bool, pca_dim: int):
+    def test_build(self, metric: str, opq: bool, pca: bool, pca_dim: int):
         if opq and pca:
             with pytest.raises(ValueError):
                 RetrieverFaiss.Config(
@@ -86,7 +86,7 @@ class TestRetrieverFaiss:
             cfg = RetrieverFaiss.Config(
                 D, metric=metric, opq=opq, pca=pca, pca_dim=pca_dim
             )
-            index = RetrieverFaiss.new(cfg).index
+            index = RetrieverFaiss.build(cfg).index
 
             if opq:
                 assert isinstance(index, faiss.IndexPreTransform)
@@ -117,7 +117,7 @@ class TestRetrieverFaiss:
     @pytest.mark.parametrize("ivf_lists", [0, nlists])
     @pytest.mark.parametrize("opq", [False, True])
     def test_set_nprobe(self, hnsw_edges: int, ivf_lists: int, opq: bool):
-        retriever = RetrieverFaiss.new(
+        retriever = RetrieverFaiss.build(
             RetrieverFaiss.Config(
                 D, hnsw_edges=hnsw_edges, ivf_lists=ivf_lists, opq=opq
             )
@@ -135,7 +135,7 @@ class TestRetrieverFaiss:
     @pytest.mark.parametrize("ivf_lists", [0, nlists])
     @pytest.mark.parametrize("opq", [False, True])
     def test_set_efsearch(self, hnsw_edges: int, ivf_lists: int, opq: bool):
-        retriever = RetrieverFaiss.new(
+        retriever = RetrieverFaiss.build(
             RetrieverFaiss.Config(
                 D, hnsw_edges=hnsw_edges, ivf_lists=ivf_lists, opq=opq
             )

@@ -2,7 +2,7 @@ from typing import Dict, Optional
 
 import pytest
 import torch
-from torch import Tensor
+from torch import Tensor, is_tensor
 from transformers import BertModel, BertTokenizerFast
 
 from .sentence_encoder import (
@@ -90,6 +90,27 @@ class TestSentenceEncoder:
             assert isinstance(encoder, SentenceEncoderAvg)
         elif representation == "cls":
             assert isinstance(encoder, SentenceEncoderCls)
+
+    def test_tokenize(self, mock_encoder: SentenceEncoderMock):
+        examples = ["i like apples .", "this is my pen .", "i like apples ."]
+        sequences = [mock_encoder.tokenize(sentence) for sentence in examples]
+        assert len(sequences) == len(examples)
+        assert [
+            mock_encoder.tokenizer.convert_ids_to_tokens(seq) for seq in sequences
+        ] == [sentence.split() for sentence in examples]
+
+    def test_collate(self, mock_encoder: SentenceEncoderMock):
+        examples = ["i like apples .", "this is my pen .", "i like apples ."]
+        sequences = [mock_encoder.tokenize(sentence) for sentence in examples]
+        batch = mock_encoder.collate(sequences)
+        expected = mock_encoder.tokenizer(
+            examples, return_tensors="pt", padding=True, truncation=True
+        )
+        assert batch.keys() == expected.keys()
+        assert [
+            torch.equal(v, expected[k]) if torch.is_tensor(v) else v == expected[k]
+            for k, v in batch.items()
+        ]
 
     def test_encode(self, mock_encoder):
         examples = ["I like apples.", "This is my pen.", "I like apples."]

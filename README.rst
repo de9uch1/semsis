@@ -34,7 +34,7 @@ You can see the example of text search in `end2end_test.py <./tests/end2end.py>`
 
 .. code:: python
 
-    from semsis.encoder_encoder import SentenceEncoder
+    from semsis.encoder import SentenceEncoder
     from semsis.kvstore import KVStore
     from semsis.retriever import RetrieverFaiss
 

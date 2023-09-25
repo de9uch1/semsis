@@ -4,9 +4,10 @@ from typing import Dict, List, Literal, Optional
 import torch
 import torch.nn as nn
 from sentence_transformers import SentenceTransformer
-from tokenizers import Tokenizer
 from torch import Tensor
 from transformers import AutoModel, AutoTokenizer, BatchEncoding
+
+from .tokenizer import Tokenizer
 
 
 class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
@@ -34,7 +35,7 @@ class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
             name_or_path (str): Model name or path.
         """
         self.model = AutoModel.from_pretrained(name_or_path)
-        self.tokenizer = AutoTokenizer.from_pretrained(name_or_path)
+        self.tokenizer = Tokenizer.build(name_or_path)
 
     def freeze(self) -> None:
         for p in self.parameters():
@@ -65,48 +66,6 @@ class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
             return SentenceEncoderCls(model_name_or_path)
         else:
             raise NotImplementedError(f"`{representation}` is not supported.")
-
-    def tokenize(self, sentence: str) -> List[int]:
-        """Tokenize and convert a sentence to the token sequence.
-
-        Args:
-            sentence (str): An input sentence.
-
-        Returns:
-            List[int]: A token ID sequence.
-        """
-        return self.tokenizer.encode(
-            sentence, add_special_tokens=False, truncation=True
-        )
-
-    def collate(self, samples: List[List[int]]) -> BatchEncoding:
-        """Make a mini-batch from samples.
-
-        Args:
-            samples (List[List[int]]): Token sequences.
-
-        Returns:
-            BatchEncoding: A mini-batch.
-        """
-        batch = {}
-        for sample in samples:
-            item = self.tokenizer.prepare_for_model(
-                sample,
-                None,
-                add_spenical_tokens=True,
-                padding=False,
-                truncation=True,
-                pad_to_multiple_of=None,
-                return_attention_mask=False,
-                return_tensors=None,
-            )
-            for key, value in item.items():
-                if key not in batch:
-                    batch[key] = []
-                batch[key].append(value)
-
-        batch = self.tokenizer.pad(batch, padding=True, return_tensors="pt")
-        return BatchEncoding(batch).to(self.device)
 
     def encode(self, sentences: List[str]) -> Tensor:
         """Encode sentences into their sentence vectors.
@@ -179,7 +138,7 @@ class SentenceEncoderSbert(SentenceEncoder):
             name_or_path (str): Model name or path.
         """
         self.model = SentenceTransformer(name_or_path)
-        self.tokenizer: Tokenizer = self.model.tokenizer
+        self.tokenizer = Tokenizer(self.model.tokenizer)
 
     def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
         """Return the feature vectors of the given inputs.

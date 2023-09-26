@@ -30,6 +30,18 @@ logger = logging.getLogger("semsis.cli.store_kv")
 
 
 @dataclass
+class Batch:
+    """Mini-batch class.
+
+    inputs (BatchEncoding): Model inputs.
+    ids (np.ndarray): Sample IDs.
+    """
+
+    inputs: BatchEncoding
+    ids: np.ndarray
+
+
+@dataclass
 class Dataset:
     """Dataset class.
 
@@ -45,7 +57,7 @@ class Dataset:
 
     def yield_batches(
         self, tokenizer: Tokenizer, batch_size: int
-    ) -> Generator[BatchEncoding, None, None]:
+    ) -> Generator[Batch, None, None]:
         """Yields mini-batches.
 
         Args:
@@ -61,7 +73,7 @@ class Dataset:
             b, e = n * batch_size, min((n + 1) * batch_size, num_data)
             indices = sort_order[b:e]
             batch = tokenizer.collate([self.sequences[i] for i in indices])
-            yield batch
+            yield Batch(batch, indices)
 
 
 def set_pdeathsig(sig: int) -> None:
@@ -161,8 +173,10 @@ def main(args: Namespace) -> None:
         timer.reset()
         with timer.measure():
             for batch in dataset.yield_batches(tokenizer, args.batch_size):
-                sentence_vectors = encoder(batch.to(encoder.device)).cpu().numpy()
-                kvstore.add(sentence_vectors)
+                sentence_vectors = (
+                    encoder(batch.inputs.to(encoder.device)).cpu().numpy()
+                )
+                kvstore.add(sentence_vectors, batch.ids)
     logger.info(f"Stored the keys and values in {timer.total:.1f} seconds.")
 
 

@@ -67,20 +67,21 @@ def train_retriever(
     train_size, dim = training_vectors.shape
     retriever_type = load_retriever(args.backend)
     dim = training_vectors.shape[1]
-    cfg = retriever_type.Config(dim, backend=args.backend, metric=args.metric)
+    cfg_dc = retriever_type.Config
+    cfg_dict = {"dim": dim, "backend": args.backend, "metric": args.metric}
 
-    def setattr_if_hasattr(name: str):
-        if hasattr(cfg, name):
-            setattr(cfg, name, getattr(args, name))
+    def set_if_hasattr(name: str):
+        if hasattr(cfg_dc, name):
+            cfg_dict[name] = getattr(args, name)
 
-    setattr_if_hasattr("hnsw_edges")
-    setattr_if_hasattr("ivf_lists")
-    setattr_if_hasattr("pq_subvec")
-    setattr_if_hasattr("opq")
-    setattr_if_hasattr("pca")
-    setattr_if_hasattr("pca_dim")
-    setattr_if_hasattr("fp16")
-
+    set_if_hasattr("hnsw_edges")
+    set_if_hasattr("ivf_lists")
+    set_if_hasattr("pq_subvec")
+    set_if_hasattr("opq")
+    set_if_hasattr("pca")
+    set_if_hasattr("pca_dim")
+    set_if_hasattr("fp16")
+    cfg = retriever_type.Config(**cfg_dict)
     logger.info(cfg)
     logger.info(f"Input vector: {cfg.dim} dimension")
 

@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 import faiss
 import numpy as np
 
-from semsis.retriever.base import Retriever
+from semsis.retriever.base import Retriever, register
 
 MetricType = int
 
@@ -46,6 +46,7 @@ def faiss_index_builder(
             return faiss.IndexFlat(dim, metric)
 
 
+@register("faiss")
 class RetrieverFaiss(Retriever):
     """Faiss retriever classes.
 

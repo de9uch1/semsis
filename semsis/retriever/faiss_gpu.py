@@ -5,6 +5,7 @@ import faiss
 import numpy as np
 import torch
 
+from semsis.retriever.base import register
 from semsis.retriever.faiss import RetrieverFaiss
 
 
@@ -53,6 +54,7 @@ def faiss_index_to_cpu(index: faiss.GpuIndex) -> faiss.Index:
     return faiss.index_gpu_to_cpu(index)
 
 
+@register("faiss_gpu")
 class RetrieverFaissGPU(RetrieverFaiss):
     """Faiss GPU retriever classes.
 

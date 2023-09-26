@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+import fileinput
+import logging
+import sys
+from argparse import ArgumentParser, Namespace
+from os import PathLike
+from typing import Generator, List
+
+import torch
+
+from semsis.encoder import SentenceEncoder
+from semsis.retriever import load_retriever
+from semsis.utils import Stopwatch
+
+logging.basicConfig(
+    format="| %(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level="INFO",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("semsis.cli.query_interactive")
+
+
+def buffer_lines(
+    input: PathLike, buffer_size: int = 1
+) -> Generator[List[str], None, None]:
+    buf: List[str] = []
+    with fileinput.input(
+        [input], mode="r", openhook=fileinput.hook_encoded("utf-8")
+    ) as f:
+        for line in f:
+            buf.append(line.strip())
+            if len(buf) >= buffer_size:
+                yield buf
+                buf = []
+        if len(buf) > 0:
+            yield buf
+
+
+def parse_args() -> Namespace:
+    """Parses the command line arguments.
+
+    Returns:
+        Namespace: Command line arguments.
+    """
+    parser = ArgumentParser()
+    # fmt: off
+    parser.add_argument("--input", type=str, default="-",
+                        help="Input file.")
+    parser.add_argument("--index-path", metavar="FILE",
+                        help="Path to an index file.")
+    parser.add_argument("--config-path", metavar="FILE", required=True,
+                        help="Path to a configuration file.")
+    parser.add_argument("--model", type=str, default="sentence-transformers/LaBSE",
+                        help="Model name")
+    parser.add_argument("--representation", type=str, default="sbert", choices=["avg", "cls", "sbert"],
+                        help="Sentence representation type.")
+    parser.add_argument("--backend", metavar="NAME", type=str, default="faiss",
+                        help="Backend of the search engine.")
+    parser.add_argument("--gpu-encode", action="store_true",
+                        help="Transfer the encoder to GPUs.")
+    parser.add_argument("--gpu-retrieve", action="store_true",
+                        help="Transfer the retriever to GPUs.")
+    parser.add_argument("--fp16", action="store_true",
+                        help="Use FP16.")
+    parser.add_argument("--ntrials", type=int, default=1,
+                        help="Number of trials to measure the search time.")
+    parser.add_argument("--topk", type=int, default=1,
+                        help="Search the top-k nearest neighbor.")
+    parser.add_argument("--buffer-size", type=int, default=1,
+                        help="Number of trials to measure the search time.")
+    parser.add_argument("--msec", action="store_true",
+                        help="Show the search time in milli seconds instead of seconds.")
+    # fmt: on
+    return parser.parse_args()
+
+
+def main(args: Namespace) -> None:
+    logger.info(args)
+
+    timer = Stopwatch()
+    encoder = SentenceEncoder.build(args.model, args.representation)
+    if torch.cuda.is_available() and args.gpu_encode:
+        encoder = encoder.cuda()
+        if args.fp16:
+            encoder = encoder.half()
+        logger.info(f"The encoder is on the GPU.")
+
+    retriever_type = load_retriever(args.backend)
+    retriever = retriever_type.load(args.index_path, args.config_path)
+    if torch.cuda.is_available() and args.gpu_retrieve:
+        retriever.to_gpu_search()
+    logger.info(f"Retriever configuration: {retriever.cfg}")
+    logger.info(f"Retriever index size: {len(retriever):,}")
+
+    ntrials = args.ntrials
+    start_id = 0
+    nqueryed = 0
+    acctime = 0.0
+    time_unit = "msec" if args.msec else "sec"
+    for lines in buffer_lines(args.input, buffer_size=args.buffer_size):
+        timer.reset()
+        for _ in range(ntrials):
+            with timer.measure():
+                querys = encoder.encode(lines).cpu().numpy()
+                dists, idxs = retriever.search(querys, k=args.topk)
+
+        for i in range(len(lines)):
+            uid = start_id + i
+            dist_str = " ".join([f"{x:.3f}" for x in dists[i].tolist()])
+            idx_str = " ".join([str(x) for x in idxs[i].tolist()])
+            print(f"D-{uid}\t{dist_str}")
+            print(f"I-{uid}\t{idx_str}")
+
+        search_time = timer.total
+        if args.msec:
+            search_time *= 1000
+        search_time_str = f"{search_time:.1f}"
+        avg_search_time_str = f"{search_time / ntrials:.1f}"
+
+        nqueryed = start_id + len(lines)
+        print(f"T-{start_id}:{nqueryed - 1}\t{search_time_str} {time_unit}")
+        print(f"A-{start_id}:{nqueryed - 1}\t{avg_search_time_str} {time_unit}")
+
+        start_id = nqueryed
+        acctime += timer.total
+
+    if args.msec:
+        acctime *= 1000
+    avgtime = acctime / (nqueryed * ntrials)
+
+    print(f"Total acctime: {acctime:.1f} {time_unit}")
+    print(f"Total avgtime: {avgtime:.1f} {time_unit}")
+
+
+def cli_main() -> None:
+    args = parse_args()
+    main(args)
+
+
+if __name__ == "__main__":
+    cli_main()

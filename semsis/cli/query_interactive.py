@@ -3,6 +3,7 @@ import fileinput
 import logging
 import sys
 from argparse import ArgumentParser, Namespace
+from collections import defaultdict
 from os import PathLike
 from typing import Generator, List
 
@@ -78,7 +79,6 @@ def parse_args() -> Namespace:
 def main(args: Namespace) -> None:
     logger.info(args)
 
-    timer = Stopwatch()
     encoder = SentenceEncoder.build(args.model, args.representation)
     if torch.cuda.is_available() and args.gpu_encode:
         encoder = encoder.cuda()
@@ -93,44 +93,64 @@ def main(args: Namespace) -> None:
     logger.info(f"Retriever configuration: {retriever.cfg}")
     logger.info(f"Retriever index size: {len(retriever):,}")
 
+    encode_timer, retrieve_timer = Stopwatch(), Stopwatch()
     ntrials = args.ntrials
     start_id = 0
     nqueryed = 0
-    acctime = 0.0
+    acctimes = defaultdict(float)
     time_unit = "msec" if args.msec else "sec"
     for lines in buffer_lines(args.input, buffer_size=args.buffer_size):
-        timer.reset()
+        encode_timer.reset()
+        retrieve_timer.reset()
         for _ in range(ntrials):
-            with timer.measure():
+            with encode_timer.measure():
                 querys = encoder.encode(lines).cpu().numpy()
+            with retrieve_timer.measure():
                 dists, idxs = retriever.search(querys, k=args.topk)
 
         for i in range(len(lines)):
             uid = start_id + i
             dist_str = " ".join([f"{x:.3f}" for x in dists[i].tolist()])
             idx_str = " ".join([str(x) for x in idxs[i].tolist()])
-            print(f"D-{uid}\t{dist_str}")
-            print(f"I-{uid}\t{idx_str}")
+            print(f"Distance-{uid}\t{dist_str}")
+            print(f"Result-{uid}\t{idx_str}")
 
-        search_time = timer.total
+        encode_time = encode_timer.total
+        retrieve_time = retrieve_timer.total
+        search_time = encode_time + retrieve_time
         if args.msec:
+            encode_time *= 1000
+            retrieve_time *= 1000
             search_time *= 1000
-        search_time_str = f"{search_time:.1f}"
-        avg_search_time_str = f"{search_time / ntrials:.1f}"
 
         nqueryed = start_id + len(lines)
-        print(f"T-{start_id}:{nqueryed - 1}\t{search_time_str} {time_unit}")
-        print(f"A-{start_id}:{nqueryed - 1}\t{avg_search_time_str} {time_unit}")
+        print(f"EncodeTime-{start_id}:{nqueryed - 1}\t{encode_time:.1f} {time_unit}")
+        print(
+            f"AverageEncodeTime-{start_id}:{nqueryed - 1}\t{encode_time / ntrials:.1f} {time_unit}"
+        )
+        print(
+            f"RetrieveTime-{start_id}:{nqueryed - 1}\t{retrieve_time:.1f} {time_unit}"
+        )
+        print(
+            f"AverageRetrieveTime-{start_id}:{nqueryed - 1}\t{retrieve_time / ntrials:.1f} {time_unit}"
+        )
+        print(f"SearchTime-{start_id}:{nqueryed - 1}\t{search_time:.1f} {time_unit}")
+        print(
+            f"AverageSearchTime-{start_id}:{nqueryed - 1}\t{search_time / ntrials:.1f} {time_unit}"
+        )
 
         start_id = nqueryed
-        acctime += timer.total
+        acctimes["encode"] += encode_time
+        acctimes["retrieve"] += retrieve_time
+        acctimes["search"] += search_time
 
-    if args.msec:
-        acctime *= 1000
-    avgtime = acctime / (nqueryed * ntrials)
+    avgtimes = defaultdict(float)
+    for k, v in acctimes.items():
+        avgtimes[k] = v / (nqueryed * ntrials)
 
-    print(f"Total acctime: {acctime:.1f} {time_unit}")
-    print(f"Total avgtime: {avgtime:.1f} {time_unit}")
+    for k in acctimes.keys():
+        print(f"Total {k} time: {acctimes[k]:.1f} {time_unit}")
+        print(f"Average {k} time: {avgtimes[k]:.1f} {time_unit}")
 
 
 def cli_main() -> None:

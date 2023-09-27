@@ -56,7 +56,7 @@ def parse_args() -> Namespace:
                         help="Model name")
     parser.add_argument("--representation", type=str, default="sbert", choices=["avg", "cls", "sbert"],
                         help="Sentence representation type.")
-    parser.add_argument("--backend", metavar="NAME", type=str, default="faiss",
+    parser.add_argument("--backend", metavar="NAME", type=str, default="faiss-cpu",
                         help="Backend of the search engine.")
     parser.add_argument("--gpu-encode", action="store_true",
                         help="Transfer the encoder to GPUs.")
@@ -93,64 +93,55 @@ def main(args: Namespace) -> None:
     logger.info(f"Retriever configuration: {retriever.cfg}")
     logger.info(f"Retriever index size: {len(retriever):,}")
 
-    encode_timer, retrieve_timer = Stopwatch(), Stopwatch()
+    timers = defaultdict(Stopwatch)
     ntrials = args.ntrials
     start_id = 0
     nqueryed = 0
     acctimes = defaultdict(float)
-    time_unit = "msec" if args.msec else "sec"
+    unit = "msec" if args.msec else "sec"
     for lines in buffer_lines(args.input, buffer_size=args.buffer_size):
-        encode_timer.reset()
-        retrieve_timer.reset()
+        timers["encode"].reset()
+        timers["retrieve"].reset()
         for _ in range(ntrials):
-            with encode_timer.measure():
+            with timers["encode"].measure():
                 querys = encoder.encode(lines).cpu().numpy()
-            with retrieve_timer.measure():
+            with timers["retrieve"].measure():
                 dists, idxs = retriever.search(querys, k=args.topk)
 
-        for i in range(len(lines)):
+        for i, line in enumerate(lines):
             uid = start_id + i
             dist_str = " ".join([f"{x:.3f}" for x in dists[i].tolist()])
             idx_str = " ".join([str(x) for x in idxs[i].tolist()])
-            print(f"Distance-{uid}\t{dist_str}")
-            print(f"Result-{uid}\t{idx_str}")
+            print(f"Q-{uid}\t{line})")
+            print(f"D-{uid}\t{dist_str}")
+            print(f"I-{uid}\t{idx_str}")
 
-        encode_time = encode_timer.total
-        retrieve_time = retrieve_timer.total
-        search_time = encode_time + retrieve_time
+        times = {k: timer.total for k, timer in timers.items()}
+        times["search"] = sum([timer.total for timer in timers.values()])
         if args.msec:
-            encode_time *= 1000
-            retrieve_time *= 1000
-            search_time *= 1000
+            times = {k: t * 1000 for k, t in times.items()}
+        for name, t in times.items():
+            acctimes[name] += t
 
         nqueryed = start_id + len(lines)
-        print(f"EncodeTime-{start_id}:{nqueryed - 1}\t{encode_time:.1f} {time_unit}")
-        print(
-            f"AverageEncodeTime-{start_id}:{nqueryed - 1}\t{encode_time / ntrials:.1f} {time_unit}"
-        )
-        print(
-            f"RetrieveTime-{start_id}:{nqueryed - 1}\t{retrieve_time:.1f} {time_unit}"
-        )
-        print(
-            f"AverageRetrieveTime-{start_id}:{nqueryed - 1}\t{retrieve_time / ntrials:.1f} {time_unit}"
-        )
-        print(f"SearchTime-{start_id}:{nqueryed - 1}\t{search_time:.1f} {time_unit}")
-        print(
-            f"AverageSearchTime-{start_id}:{nqueryed - 1}\t{search_time / ntrials:.1f} {time_unit}"
-        )
+        for name, c in [("encode", "E"), ("retrieve", "R"), ("search", "S")]:
+            t = times[name]
+            at = times[name] / ntrials
+            print(f"T{c}-{start_id}:{nqueryed}\t{t:.1f} {unit}")
+            print(f"AT{c}-{start_id}:{nqueryed}\t{at:.1f} {unit}")
 
         start_id = nqueryed
-        acctimes["encode"] += encode_time
-        acctimes["retrieve"] += retrieve_time
-        acctimes["search"] += search_time
 
-    avgtimes = defaultdict(float)
+    batch_avgtimes = defaultdict(float)
+    single_avgtimes = defaultdict(float)
     for k, v in acctimes.items():
-        avgtimes[k] = v / (nqueryed * ntrials)
+        batch_avgtimes[k] = v / ntrials
+        single_avgtimes[k] = v / (nqueryed * ntrials)
 
     for k in acctimes.keys():
-        print(f"Total {k} time: {acctimes[k]:.1f} {time_unit}")
-        print(f"Average {k} time: {avgtimes[k]:.1f} {time_unit}")
+        print(f"Total {k} time: {acctimes[k]:.1f} {unit}")
+        print(f"Average {k} time per batch: {batch_avgtimes[k]:.1f} {unit}")
+        print(f"Average {k} time per single query: {single_avgtimes[k]:.1f} {unit}")
 
 
 def cli_main() -> None:

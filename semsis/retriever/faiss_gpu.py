@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
@@ -7,6 +8,8 @@ import torch
 
 from semsis.retriever.base import register
 from semsis.retriever.faiss import RetrieverFaiss
+
+logger = logging.getLogger("semsis.cli.query_interactive")
 
 
 def faiss_index_to_gpu(
@@ -54,9 +57,9 @@ def faiss_index_to_cpu(index: faiss.GpuIndex) -> faiss.Index:
     return faiss.index_gpu_to_cpu(index)
 
 
-@register("faiss_gpu")
+@register("faiss-gpu")
 class RetrieverFaissGPU(RetrieverFaiss):
-    """Faiss GPU retriever classes.
+    """Faiss GPU retriever class.
 
     This class extend the faiss behavior for efficiency.
 
@@ -77,7 +80,7 @@ class RetrieverFaissGPU(RetrieverFaiss):
     class Config(RetrieverFaiss.Config):
         """Configuration of the retriever."""
 
-        fp16: bool = True
+        fp16: bool = False
 
     def to_gpu_train(self) -> None:
         """Transfers the faiss index to GPUs for training.
@@ -182,6 +185,7 @@ class RetrieverFaissGPU(RetrieverFaiss):
                 faiss.downcast_index(ivf_index.quantizer).storage
             )
         self.index = faiss_index_to_gpu(self.index, shard=True)
+        logger.info(f"The retriever index is on the GPU.")
 
     def to_cpu(self) -> None:
         """Transfers the faiss index to CPUs."""

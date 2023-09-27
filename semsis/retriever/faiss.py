@@ -46,9 +46,9 @@ def faiss_index_builder(
             return faiss.IndexFlat(dim, metric)
 
 
-@register("faiss")
+@register("faiss-cpu")
 class RetrieverFaiss(Retriever):
-    """Faiss retriever classes.
+    """Faiss retriever class.
 
     Args:
         index (faiss.Index): Index object.

@@ -39,7 +39,7 @@ def parse_args() -> Namespace:
                         help="Only use CPU.")
     parser.add_argument("--fp16", action="store_true",
                         help="Use FP16.")
-    parser.add_argument("--backend", metavar="NAME", type=str, default="faiss",
+    parser.add_argument("--backend", metavar="NAME", type=str, default="faiss-cpu",
                         help="Backend of the search engine.")
     parser.add_argument("--metric", metavar="TYPE", default="l2", choices=["l2", "ip", "cos"],
                         help="Distance function.")

@@ -69,9 +69,15 @@ def parse_args() -> Namespace:
     parser.add_argument("--topk", type=int, default=1,
                         help="Search the top-k nearest neighbor.")
     parser.add_argument("--buffer-size", type=int, default=1,
-                        help="Number of trials to measure the search time.")
+                        help="Buffer size to query at a time.")
     parser.add_argument("--msec", action="store_true",
                         help="Show the search time in milli seconds instead of seconds.")
+    parser.add_argument("--efsearch", type=int, default=16,
+                        help="Set the efSearch parameter for the HNSW indexes. "
+                        "This corresponds to the beam width at the search time.")
+    parser.add_argument("--nprobe", type=int, default=8,
+                        help="Set the nprobe parameter for the IVF indexes. "
+                        "This corresponds to the number of neighboring clusters to be searched.")
     # fmt: on
     return parser.parse_args()
 
@@ -88,6 +94,8 @@ def main(args: Namespace) -> None:
 
     retriever_type = load_retriever(args.backend)
     retriever = retriever_type.load(args.index_path, args.config_path)
+    retriever.set_efsearch(args.efsearch)
+    retriever.set_nprobe(args.nprobe)
     if torch.cuda.is_available() and args.gpu_retrieve:
         retriever.to_gpu_search()
     logger.info(f"Retriever configuration: {retriever.cfg}")
@@ -112,7 +120,7 @@ def main(args: Namespace) -> None:
             uid = start_id + i
             dist_str = " ".join([f"{x:.3f}" for x in dists[i].tolist()])
             idx_str = " ".join([str(x) for x in idxs[i].tolist()])
-            print(f"Q-{uid}\t{line})")
+            print(f"Q-{uid}\t{line}")
             print(f"D-{uid}\t{dist_str}")
             print(f"I-{uid}\t{idx_str}")
 

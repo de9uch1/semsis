@@ -81,6 +81,21 @@ class Retriever(abc.ABC):
     def to_cpu(self) -> None:
         """Transfers the index to CPUs."""
 
+    def set_nprobe(self, nprobe: int) -> None:
+        """Set nprobe parameter for IVF-family indexes.
+
+        Args:
+            nprobe (int): Number of nearest neighbor clusters that are
+              probed in search time.
+        """
+
+    def set_efsearch(self, efsearch: int) -> None:
+        """Set efSearch parameter for HNSW indexes.
+
+        Args:
+            efsearch (int): The depth of exploration of the search.
+        """
+
     @abc.abstractmethod
     def normalize(self, vectors: np.ndarray) -> np.ndarray:
         """Normalize the input vectors for a backend library and the specified metric.

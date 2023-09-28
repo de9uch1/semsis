@@ -1,51 +1,52 @@
+import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 import faiss
 import numpy as np
 import torch
 
-from semsis.retriever.faiss import RetrieverFaiss
+from semsis.retriever.base import register
+from semsis.retriever.faiss_cpu import RetrieverFaissCPU
+
+logger = logging.getLogger(__name__)
+
+GpuIndex = (
+    faiss.GpuIndex if hasattr(faiss, "GpuIndex") else faiss.Index
+)  # avoid error on faiss-cpu
+ShardedGpuIndex = Union[GpuIndex, faiss.IndexReplicas]
 
 
 def faiss_index_to_gpu(
-    index: faiss.Index,
-    num_gpus: int = -1,
-    shard: bool = False,
-    precompute: bool = False,
-    fp16: bool = True,
-) -> faiss.GpuIndex:
+    index: faiss.Index, num_gpus: int = -1, precompute: bool = False, fp16: bool = False
+) -> ShardedGpuIndex:
     """Transfers the index from CPU to GPU.
 
     Args:
         index (faiss.Index): Faiss index.
-        num_gpus (int): Number of GPUs to use.
-        shard (bool): Builds an IndexShards.
-        precompute (bool): Uses the precompute table for L2 distance.
+        num_gpus (int): Number of GPUs to use. `-1` uses all devices.
+        precompute (bool): Uses the precompute table for IVF-family.
         fp16 (bool): Use fp16.
 
     Returns:
-        faiss.GpuIndex: Faiss index.
+        faiss.GpuIndex | faiss.IndexReplicas: Faiss index.
     """
     co = faiss.GpuMultipleClonerOptions()
     co.useFloat16 = fp16
     co.useFloat16CoarseQuantizer = fp16
     co.indicesOptions = faiss.INDICES_CPU
-
+    co.shard = True
     if precompute:
         co.usePrecomputed = precompute
-
-    if shard:
-        co.shard = True
 
     return faiss.index_cpu_to_all_gpus(index, co, ngpu=num_gpus)
 
 
-def faiss_index_to_cpu(index: faiss.GpuIndex) -> faiss.Index:
+def faiss_index_to_cpu(index: ShardedGpuIndex) -> faiss.Index:
     """Transfers the index from GPU to CPU.
 
     Args:
-        index (faiss.GpuIndex): faiss index.
+        index (faiss.GpuIndex | faiss.IndexReplicas): faiss index.
 
     Returns:
         faiss.Index: faiss index.
@@ -53,14 +54,15 @@ def faiss_index_to_cpu(index: faiss.GpuIndex) -> faiss.Index:
     return faiss.index_gpu_to_cpu(index)
 
 
-class RetrieverFaissGPU(RetrieverFaiss):
-    """Faiss GPU retriever classes.
+@register("faiss-gpu")
+class RetrieverFaissGPU(RetrieverFaissCPU):
+    """Faiss GPU retriever class.
 
     This class extend the faiss behavior for efficiency.
 
     Args:
         index (faiss.Index): Index object.
-        cfg (FaissRetriever.Config): Configuration dataclass.
+        cfg (RetrieverFaissGPU.Config): Configuration dataclass.
     """
 
     cfg: "RetrieverFaissGPU.Config"
@@ -69,13 +71,28 @@ class RetrieverFaissGPU(RetrieverFaiss):
         super().__init__(index, cfg)
         self.A: Optional[torch.Tensor] = None
         self.b: Optional[torch.Tensor] = None
-        self.gpu_ivf_index: Optional[faiss.Index] = None
+        self.gpu_ivf_index: Optional[ShardedGpuIndex] = None
 
     @dataclass
-    class Config(RetrieverFaiss.Config):
-        """Configuration of the retriever."""
+    class Config(RetrieverFaissCPU.Config):
+        """Configuration of the retriever.
 
-        fp16: bool = True
+        - dim (int): Size of the dimension.
+        - backend (str): Backend of the search engine.
+        - metric (str): Distance function.
+        - hnsw_nlinks (int): [HNSW] Number of links for each node.
+            If this value is greater than 0, HNSW will be used.
+        - ivf_nlists (int): [IVF] Number of centroids.
+        - pq_nblocks (int): [PQ] Number of sub-vectors to be splitted.
+        - pq_nbits (int): [PQ] Size of codebooks for each sub-space.
+            Usually 8 bit is employed; thus, each codebook has 256 codes.
+        - opq (bool): [OPQ] Use OPQ pre-transformation which minimizes the quantization error.
+        - pca (bool): [PCA] Use PCA dimension reduction.
+        - pca_dim (int): [PCA] Dimension size which is reduced by PCA.
+        - fp16 (bool): Use FP16.
+        """
+
+        fp16: bool = False
 
     def to_gpu_train(self) -> None:
         """Transfers the faiss index to GPUs for training.
@@ -101,7 +118,6 @@ class RetrieverFaissGPU(RetrieverFaiss):
             ivf = faiss.extract_index_ivf(self.index)
             clustering_index = faiss_index_to_gpu(
                 faiss.IndexFlat(ivf.d, self.METRICS_MAP[self.cfg.metric]),
-                shard=True,
                 fp16=self.cfg.fp16,
             )
             ivf.clustering_index = clustering_index
@@ -163,13 +179,13 @@ class RetrieverFaissGPU(RetrieverFaiss):
                 # Temporarily replace the HNSW coarse quantizer with the flat index.
                 hnsw_cq = faiss.downcast_index(ivf.quantizer)
                 ivf.quantizer = faiss.downcast_index(hnsw_cq.storage)
-                self.gpu_ivf_index = faiss_index_to_gpu(ivf, shard=True)
+                self.gpu_ivf_index = faiss_index_to_gpu(ivf)
 
                 # After transfering the IVF index with the flat coarse quantizer,
                 # the coarse quantizer of the master IVF index is restored to HNSW.
                 ivf.quantizer = hnsw_cq
             else:
-                self.gpu_ivf_index = faiss_index_to_gpu(ivf, shard=True)
+                self.gpu_ivf_index = faiss_index_to_gpu(ivf)
             self.gpu_ivf_index.reset()
 
     def to_gpu_search(self) -> None:
@@ -179,14 +195,15 @@ class RetrieverFaissGPU(RetrieverFaiss):
             ivf_index.quantizer = faiss.downcast_index(
                 faiss.downcast_index(ivf_index.quantizer).storage
             )
-        self.index = faiss_index_to_gpu(self.index, shard=True)
+        self.index = faiss_index_to_gpu(self.index)
+        logger.info(f"The retriever index is on the GPU.")
 
     def to_cpu(self) -> None:
         """Transfers the faiss index to CPUs."""
         self.index = faiss_index_to_cpu(self.index)
 
     def rotate(self, x: torch.Tensor, shard_size: int = 2**20) -> torch.Tensor:
-        """Rotate the input vectors.
+        """Rotate the input vectors instead of faiss.IndexPreTransform.
 
         Args:
             x (torch.Tensor): Input vectors of shpae `(n, D)`

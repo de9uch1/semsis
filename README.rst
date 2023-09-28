@@ -36,7 +36,7 @@ You can see the example of text search in `end2end_test.py <./tests/end2end.py>`
 
     from semsis.encoder import SentenceEncoder
     from semsis.kvstore import KVStore
-    from semsis.retriever import RetrieverFaiss
+    from semsis.retriever import RetrieverFaissCPU
 
     TEXT = [
         "They listen to jazz and he likes jazz piano like Bud Powell.",
@@ -74,7 +74,7 @@ You can see the example of text search in `end2end_test.py <./tests/end2end.py>`
 .. code:: python
 
     with KVStore.open(KVSTORE_PATH, mode="r") as kvstore:
-        retriever = RetrieverFaiss.build(RetrieverFaiss.Config(dim))
+        retriever = RetrieverFaissCPU.build(RetrieverFaissCPU.Config(dim))
         retriever.train(kvstore.key[:])
         retriever.add(kvstore.key[:], kvstore.value[:])
 
@@ -84,7 +84,7 @@ You can see the example of text search in `end2end_test.py <./tests/end2end.py>`
 
 .. code:: python
 
-    retriever = RetrieverFaiss.load(index_path, cfg_path)
+    retriever = RetrieverFaissCPU.load(index_path, cfg_path)
     query_vectors = encoder.encode(QUERYS).numpy()
     distances, indices = retriever.search(query_vectors, k=1)
 

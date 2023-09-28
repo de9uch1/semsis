@@ -1,10 +1,12 @@
 import abc
 from dataclasses import asdict, dataclass
 from os import PathLike
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple, Type, TypeVar
 
 import numpy as np
 import yaml
+
+T = TypeVar("T")
 
 
 class Retriever(abc.ABC):
@@ -21,10 +23,15 @@ class Retriever(abc.ABC):
 
     @dataclass
     class Config:
-        """Configuration of the retriever."""
+        """Configuration of the retriever.
+
+        - dim (int): Size of the dimension.
+        - backend (str): Backend of the search engine.
+        - metric (str): Distance function.
+        """
 
         dim: int
-        backend: str = "faiss"
+        backend: str = "faiss-cpu"
         metric: str = "l2"
 
         def save(self, path: PathLike) -> None:
@@ -56,7 +63,7 @@ class Retriever(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def build(cls, cfg: "Config"):
+    def build(cls: Type[T], cfg: "Config") -> T:
         """Build this class from the given configuration.
 
 
@@ -65,6 +72,33 @@ class Retriever(abc.ABC):
 
         Returns:
             Retriever: This class with the constucted index object.
+        """
+
+    def to_gpu_train(self) -> None:
+        """Transfers the index to GPUs for training."""
+
+    def to_gpu_add(self) -> None:
+        """Transfers the index to GPUs for adding vectors."""
+
+    def to_gpu_search(self) -> None:
+        """Transfers the index to GPUs for searching."""
+
+    def to_cpu(self) -> None:
+        """Transfers the index to CPUs."""
+
+    def set_nprobe(self, nprobe: int) -> None:
+        """Set nprobe parameter for IVF-family indexes.
+
+        Args:
+            nprobe (int): Number of nearest neighbor clusters that are
+              probed in search time.
+        """
+
+    def set_efsearch(self, efsearch: int) -> None:
+        """Set efSearch parameter for HNSW indexes.
+
+        Args:
+            efsearch (int): The depth of exploration of the search.
         """
 
     @abc.abstractmethod
@@ -110,7 +144,7 @@ class Retriever(abc.ABC):
         """
 
     @classmethod
-    def load(cls, index_path: PathLike, cfg_path: PathLike):
+    def load(cls: Type[T], index_path: PathLike, cfg_path: PathLike) -> T:
         """Loads the index and its configuration.
 
         Args:
@@ -153,3 +187,30 @@ class Retriever(abc.ABC):
         Args:
             path (os.PathLike): Index file path to save.
         """
+
+
+T = TypeVar("T")
+
+REGISTRY = {}
+
+
+def register(name: str) -> Callable[[Type[T]], Type[T]]:
+    """Register a retriever class as the given name.
+
+    Args:
+        name (str): The name of a class.
+    """
+
+    def _register(cls: Type[T]):
+        if name in REGISTRY:
+            raise ValueError(
+                f"{name} already registered as {REGISTRY[name].__name__}. ({cls.__name__})"
+            )
+        REGISTRY[name] = cls
+        return cls
+
+    return _register
+
+
+def get_retriever_type(name: str) -> Type[Retriever]:
+    return REGISTRY[name]

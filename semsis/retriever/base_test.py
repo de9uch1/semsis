@@ -1,5 +1,5 @@
 import pickle
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from os import PathLike
 from pathlib import Path
 from typing import Any, Optional, Tuple
@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import yaml
 
-from semsis.retriever.base import Retriever
+from semsis.retriever.base import REGISTRY, Retriever, get_retriever_type, register
 
 D = 8
 
@@ -82,3 +82,29 @@ class TestRetriever:
         new_retriever = RetrieverMock.load(idx_path, cfg_path)
         assert new_retriever.index == retriever.index
         assert new_retriever.cfg == retriever.cfg
+
+
+def test_register():
+    assert "mock1" not in REGISTRY
+
+    @register("mock1")
+    class MockClass1(RetrieverMock):
+        ...
+
+    assert "mock1" in REGISTRY
+    assert issubclass(REGISTRY["mock1"], MockClass1)
+    assert issubclass(get_retriever_type("mock1"), MockClass1)
+
+    @register("mock2")
+    class MockClass2(RetrieverMock):
+        ...
+
+    assert "mock2" in REGISTRY
+    assert issubclass(REGISTRY["mock2"], MockClass2)
+    assert issubclass(get_retriever_type("mock2"), MockClass2)
+
+    with pytest.raises(ValueError):
+
+        @register("mock1")
+        class MockClass3(RetrieverMock):
+            ...

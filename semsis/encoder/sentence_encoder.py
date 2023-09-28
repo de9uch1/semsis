@@ -1,11 +1,11 @@
 import abc
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal
 
 import torch
 import torch.nn as nn
 from sentence_transformers import SentenceTransformer
 from torch import Tensor
-from transformers import AutoModel, AutoTokenizer, BatchEncoding
+from transformers import AutoModel
 
 from .tokenizer import Tokenizer
 

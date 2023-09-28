@@ -1,8 +1,8 @@
-from typing import Dict, Optional
+from typing import Dict
 
 import pytest
 import torch
-from torch import Tensor, is_tensor
+from torch import Tensor
 from transformers import BertModel, BertTokenizerFast
 
 from .sentence_encoder import (
@@ -62,8 +62,8 @@ class TestSentenceEncoder:
             and mock_encoder.model.name_or_path == BERT
         )
         assert (
-            isinstance(mock_encoder.tokenizer, BERT_TOKENIZER_CLASS)
-            and mock_encoder.tokenizer.name_or_path == BERT
+            isinstance(mock_encoder.tokenizer.tokenizer, BERT_TOKENIZER_CLASS)
+            and mock_encoder.tokenizer.tokenizer.name_or_path == BERT
         )
         assert (
             len(list(filter(lambda p: p.requires_grad, mock_encoder.parameters()))) == 0
@@ -81,8 +81,13 @@ class TestSentenceEncoder:
         assert not mock_encoder.training
 
     @pytest.mark.parametrize("name_or_path", [BERT, SBERT])
-    @pytest.mark.parametrize("representation", ["sbert", "avg", "cls"])
+    @pytest.mark.parametrize("representation", ["sbert", "avg", "cls", "dummy"])
     def test_build(self, name_or_path: str, representation: str):
+        if representation not in {"avg", "cls", "sbert"}:
+            with pytest.raises(NotImplementedError):
+                SentenceEncoderMock.build(name_or_path, representation)
+            return
+
         encoder = SentenceEncoderMock.build(name_or_path, representation)
         if representation == "sbert":
             assert isinstance(encoder, SentenceEncoderSbert)
@@ -90,27 +95,6 @@ class TestSentenceEncoder:
             assert isinstance(encoder, SentenceEncoderAvg)
         elif representation == "cls":
             assert isinstance(encoder, SentenceEncoderCls)
-
-    def test_tokenize(self, mock_encoder: SentenceEncoderMock):
-        examples = ["i like apples .", "this is my pen .", "i like apples ."]
-        sequences = [mock_encoder.tokenize(sentence) for sentence in examples]
-        assert len(sequences) == len(examples)
-        assert [
-            mock_encoder.tokenizer.convert_ids_to_tokens(seq) for seq in sequences
-        ] == [sentence.split() for sentence in examples]
-
-    def test_collate(self, mock_encoder: SentenceEncoderMock):
-        examples = ["i like apples .", "this is my pen .", "i like apples ."]
-        sequences = [mock_encoder.tokenize(sentence) for sentence in examples]
-        batch = mock_encoder.collate(sequences)
-        expected = mock_encoder.tokenizer(
-            examples, return_tensors="pt", padding=True, truncation=True
-        )
-        assert batch.keys() == expected.keys()
-        assert [
-            torch.equal(v, expected[k]) if torch.is_tensor(v) else v == expected[k]
-            for k, v in batch.items()
-        ]
 
     def test_encode(self, mock_encoder):
         examples = ["I like apples.", "This is my pen.", "I like apples."]

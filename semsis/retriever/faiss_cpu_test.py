@@ -20,38 +20,38 @@ def v() -> np.ndarray:
     return np.random.rand(N, D).astype(np.float32)
 
 
-@pytest.mark.parametrize("hnsw_edges", [0, 4])
-@pytest.mark.parametrize("pq_subvec", [0, M])
-@pytest.mark.parametrize("ivf_lists", [0, nlists])
-def test_faiss_index_builder(hnsw_edges: int, pq_subvec: int, ivf_lists: int):
+@pytest.mark.parametrize("hnsw_nlinks", [0, 4])
+@pytest.mark.parametrize("pq_nblocks", [0, M])
+@pytest.mark.parametrize("ivf_nlists", [0, nlists])
+def test_faiss_index_builder(hnsw_nlinks: int, pq_nblocks: int, ivf_nlists: int):
     cfg = RetrieverFaissCPU.Config(
         D,
-        hnsw_edges=hnsw_edges,
-        ivf_lists=ivf_lists,
-        pq_subvec=pq_subvec,
+        hnsw_nlinks=hnsw_nlinks,
+        ivf_nlists=ivf_nlists,
+        pq_nblocks=pq_nblocks,
         pq_nbits=nbits,
     )
     index = faiss_index_builder(cfg, D, RetrieverFaissCPU.METRICS_MAP[cfg.metric])
 
-    if ivf_lists > 0:
-        if pq_subvec > 0:
+    if ivf_nlists > 0:
+        if pq_nblocks > 0:
             assert isinstance(index, faiss.IndexIVFPQ)
         else:
             assert isinstance(index, faiss.IndexIVFFlat)
 
         cq = faiss.downcast_index(index.quantizer)
-        if hnsw_edges > 0:
+        if hnsw_nlinks > 0:
             assert isinstance(cq, faiss.IndexHNSWFlat)
         else:
             assert isinstance(cq, faiss.IndexFlat)
     else:
-        if pq_subvec > 0:
-            if hnsw_edges > 0:
+        if pq_nblocks > 0:
+            if hnsw_nlinks > 0:
                 assert isinstance(index, faiss.IndexHNSWPQ)
             else:
                 assert isinstance(index, faiss.IndexPQ)
         else:
-            if hnsw_edges > 0:
+            if hnsw_nlinks > 0:
                 assert isinstance(index, faiss.IndexHNSWFlat)
             else:
                 assert isinstance(index, faiss.IndexFlat)
@@ -113,17 +113,17 @@ class TestRetrieverFaissCPU:
                 assert isinstance(index, faiss.IndexIDMap)
                 assert isinstance(faiss.downcast_index(index.index), faiss.IndexFlat)
 
-    @pytest.mark.parametrize("hnsw_edges", [0, 4])
-    @pytest.mark.parametrize("ivf_lists", [0, nlists])
+    @pytest.mark.parametrize("hnsw_nlinks", [0, 4])
+    @pytest.mark.parametrize("ivf_nlists", [0, nlists])
     @pytest.mark.parametrize("opq", [False, True])
-    def test_set_nprobe(self, hnsw_edges: int, ivf_lists: int, opq: bool):
+    def test_set_nprobe(self, hnsw_nlinks: int, ivf_nlists: int, opq: bool):
         retriever = RetrieverFaissCPU.build(
             RetrieverFaissCPU.Config(
-                D, hnsw_edges=hnsw_edges, ivf_lists=ivf_lists, opq=opq
+                D, hnsw_nlinks=hnsw_nlinks, ivf_nlists=ivf_nlists, opq=opq
             )
         )
         index = retriever.index
-        if ivf_lists > 0:
+        if ivf_nlists > 0:
             assert faiss.extract_index_ivf(index).nprobe == 1
             retriever.set_nprobe(8)
             assert faiss.extract_index_ivf(index).nprobe == 8
@@ -131,18 +131,18 @@ class TestRetrieverFaissCPU:
             # Do nothing
             retriever.set_nprobe(8)
 
-    @pytest.mark.parametrize("hnsw_edges", [0, 4])
-    @pytest.mark.parametrize("ivf_lists", [0, nlists])
+    @pytest.mark.parametrize("hnsw_nlinks", [0, 4])
+    @pytest.mark.parametrize("ivf_nlists", [0, nlists])
     @pytest.mark.parametrize("opq", [False, True])
-    def test_set_efsearch(self, hnsw_edges: int, ivf_lists: int, opq: bool):
+    def test_set_efsearch(self, hnsw_nlinks: int, ivf_nlists: int, opq: bool):
         retriever = RetrieverFaissCPU.build(
             RetrieverFaissCPU.Config(
-                D, hnsw_edges=hnsw_edges, ivf_lists=ivf_lists, opq=opq
+                D, hnsw_nlinks=hnsw_nlinks, ivf_nlists=ivf_nlists, opq=opq
             )
         )
         index = retriever.index
-        if hnsw_edges > 0:
-            if ivf_lists > 0:
+        if hnsw_nlinks > 0:
+            if ivf_nlists > 0:
                 hnsw = faiss.downcast_index(
                     faiss.extract_index_ivf(index).quantizer
                 ).hnsw

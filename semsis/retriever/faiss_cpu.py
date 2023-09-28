@@ -25,24 +25,24 @@ def faiss_index_builder(
     """
     if cfg.ivf:
         if cfg.hnsw:
-            cq = faiss.IndexHNSWFlat(dim, cfg.hnsw_edges, metric)
+            cq = faiss.IndexHNSWFlat(dim, cfg.hnsw_nlinks, metric)
         else:
             cq = faiss.IndexFlat(dim, metric)
 
         if cfg.pq:
             return faiss.IndexIVFPQ(
-                cq, dim, cfg.ivf_lists, cfg.pq_subvec, cfg.pq_nbits, metric
+                cq, dim, cfg.ivf_nlists, cfg.pq_nblocks, cfg.pq_nbits, metric
             )
         else:
-            return faiss.IndexIVFFlat(cq, dim, cfg.ivf_lists, metric)
+            return faiss.IndexIVFFlat(cq, dim, cfg.ivf_nlists, metric)
     else:
         if cfg.pq:
             if cfg.hnsw:
-                return faiss.IndexHNSWPQ(dim, cfg.pq_subvec, cfg.hnsw_edges)
-            return faiss.IndexPQ(dim, cfg.pq_subvec, cfg.pq_nbits, metric)
+                return faiss.IndexHNSWPQ(dim, cfg.pq_nblocks, cfg.hnsw_nlinks)
+            return faiss.IndexPQ(dim, cfg.pq_nblocks, cfg.pq_nbits, metric)
         else:
             if cfg.hnsw:
-                return faiss.IndexHNSWFlat(dim, cfg.hnsw_edges, metric)
+                return faiss.IndexHNSWFlat(dim, cfg.hnsw_nlinks, metric)
             return faiss.IndexFlat(dim, metric)
 
 
@@ -66,20 +66,34 @@ class RetrieverFaissCPU(Retriever):
 
     @dataclass
     class Config(Retriever.Config):
-        """Configuration of the retriever."""
+        """Configuration of the retriever.
 
-        hnsw_edges: int = 0
-        ivf_lists: int = 0
-        pq_subvec: int = 0
+        - dim (int): Size of the dimension.
+        - backend (str): Backend of the search engine.
+        - metric (str): Distance function.
+        - hnsw_nlinks (int): [HNSW] Number of links for each node.
+            If this value is greater than 0, HNSW will be used.
+        - ivf_nlists (int): [IVF] Number of centroids.
+        - pq_nblocks (int): [PQ] Number of sub-vectors to be splitted.
+        - pq_nbits (int): [PQ] Size of codebooks for each sub-space.
+            Usually 8 bit is employed; thus, each codebook has 256 codes.
+        - opq (bool): [OPQ] Use OPQ pre-transformation which minimizes the quantization error.
+        - pca (bool): [PCA] Use PCA dimension reduction.
+        - pca_dim (int): [PCA] Dimension size which is reduced by PCA.
+        """
+
+        hnsw_nlinks: int = 0
+        ivf_nlists: int = 0
+        pq_nblocks: int = 0
         pq_nbits: int = 8
         opq: bool = False
         pca: bool = False
         pca_dim: int = 0
 
         def __post_init__(self):
-            self.hnsw = self.hnsw_edges > 0
-            self.ivf = self.ivf_lists > 0
-            self.pq = self.pq_subvec > 0
+            self.hnsw = self.hnsw_nlinks > 0
+            self.ivf = self.ivf_nlists > 0
+            self.pq = self.pq_nblocks > 0
             if self.opq and self.pca:
                 raise ValueError("`opq` and `pca` cannot be set True at the same time.")
             self.transform = self.opq or self.pca
@@ -109,7 +123,7 @@ class RetrieverFaissCPU(Retriever):
             index = faiss.IndexIDMap(index)
 
         if cfg.opq:
-            vtrans = faiss.OPQMatrix(cfg.dim, M=cfg.pq_subvec)
+            vtrans = faiss.OPQMatrix(cfg.dim, M=cfg.pq_nblocks)
             index = faiss.IndexPreTransform(vtrans, index)
         elif cfg.pca:
             vtrans = faiss.PCAMatrix(cfg.dim, d_out=cfg.pca_dim)

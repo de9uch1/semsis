@@ -47,12 +47,12 @@ def parse_args() -> Namespace:
                         help="The number of data to be loaded at a time.")
     parser.add_argument("--train-size", metavar="N", type=int, default=1000000,
                         help="The number of training data.")
-    parser.add_argument("--hnsw-edges", metavar="N", type=int, default=0,
-                        help="The number of HNSW edges.")
-    parser.add_argument("--ivf-lists", metavar="N", type=int, default=0,
-                        help="The number of IVF clusters")
-    parser.add_argument("--pq-subvec", metavar="N", type=int, default=0,
-                        help="The number of PQ subvectors")
+    parser.add_argument("--hnsw-nlinks", metavar="N", type=int, default=0,
+                        help="[HNSW] The number of links per node.")
+    parser.add_argument("--ivf-nlists", metavar="N", type=int, default=0,
+                        help="[IVF] The number of centroids")
+    parser.add_argument("--pq-nblocks", metavar="N", type=int, default=0,
+                        help="[PQ] The number of sub-vectors")
     parser.add_argument("--opq", action="store_true",
                         help="Use OPQ to minimize the quantization error.")
     parser.add_argument("--pca", action="store_true",
@@ -76,9 +76,9 @@ def train_retriever(
         if hasattr(cfg_dc, name):
             cfg_dict[name] = getattr(args, name)
 
-    set_if_hasattr("hnsw_edges")
-    set_if_hasattr("ivf_lists")
-    set_if_hasattr("pq_subvec")
+    set_if_hasattr("hnsw_nlinks")
+    set_if_hasattr("ivf_nlists")
+    set_if_hasattr("pq_nblocks")
     set_if_hasattr("opq")
     set_if_hasattr("pca")
     set_if_hasattr("pca_dim")

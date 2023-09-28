@@ -23,7 +23,12 @@ class Retriever(abc.ABC):
 
     @dataclass
     class Config:
-        """Configuration of the retriever."""
+        """Configuration of the retriever.
+
+        - dim (int): Size of the dimension.
+        - backend (str): Backend of the search engine.
+        - metric (str): Distance function.
+        """
 
         dim: int
         backend: str = "faiss-cpu"

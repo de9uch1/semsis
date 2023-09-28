@@ -7,9 +7,9 @@ import numpy as np
 import torch
 
 from semsis.retriever.base import register
-from semsis.retriever.faiss import RetrieverFaiss
+from semsis.retriever.faiss_cpu import RetrieverFaissCPU
 
-logger = logging.getLogger("semsis.cli.query_interactive")
+logger = logging.getLogger(__name__)
 
 
 def faiss_index_to_gpu(
@@ -58,14 +58,14 @@ def faiss_index_to_cpu(index: faiss.GpuIndex) -> faiss.Index:
 
 
 @register("faiss-gpu")
-class RetrieverFaissGPU(RetrieverFaiss):
+class RetrieverFaissGPU(RetrieverFaissCPU):
     """Faiss GPU retriever class.
 
     This class extend the faiss behavior for efficiency.
 
     Args:
         index (faiss.Index): Index object.
-        cfg (FaissRetriever.Config): Configuration dataclass.
+        cfg (RetrieverFaissGPU.Config): Configuration dataclass.
     """
 
     cfg: "RetrieverFaissGPU.Config"
@@ -74,10 +74,10 @@ class RetrieverFaissGPU(RetrieverFaiss):
         super().__init__(index, cfg)
         self.A: Optional[torch.Tensor] = None
         self.b: Optional[torch.Tensor] = None
-        self.gpu_ivf_index: Optional[faiss.Index] = None
+        self.gpu_ivf_index: Optional[faiss.GpuIndexIVF] = None
 
     @dataclass
-    class Config(RetrieverFaiss.Config):
+    class Config(RetrieverFaissCPU.Config):
         """Configuration of the retriever."""
 
         fp16: bool = False
@@ -192,7 +192,7 @@ class RetrieverFaissGPU(RetrieverFaiss):
         self.index = faiss_index_to_cpu(self.index)
 
     def rotate(self, x: torch.Tensor, shard_size: int = 2**20) -> torch.Tensor:
-        """Rotate the input vectors.
+        """Rotate the input vectors instead of faiss.IndexPreTransform.
 
         Args:
             x (torch.Tensor): Input vectors of shpae `(n, D)`

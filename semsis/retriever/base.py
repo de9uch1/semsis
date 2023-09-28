@@ -1,7 +1,7 @@
 import abc
 from dataclasses import asdict, dataclass
 from os import PathLike
-from typing import Any, Callable, Generic, Optional, Tuple, Type, TypeVar
+from typing import Any, Callable, Optional, Tuple, Type, TypeVar
 
 import numpy as np
 import yaml
@@ -26,7 +26,7 @@ class Retriever(abc.ABC):
         """Configuration of the retriever."""
 
         dim: int
-        backend: str = "faiss"
+        backend: str = "faiss-cpu"
         metric: str = "l2"
 
         def save(self, path: PathLike) -> None:
@@ -205,3 +205,7 @@ def register(name: str) -> Callable[[Type[T]], Type[T]]:
         return cls
 
     return _register
+
+
+def get_retriever_type(name: str) -> Type[Retriever]:
+    return REGISTRY[name]

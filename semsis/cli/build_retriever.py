@@ -11,7 +11,7 @@ import torch
 from tqdm import tqdm
 
 from semsis.kvstore import KVStore
-from semsis.retriever import Retriever, load_retriever
+from semsis.retriever import Retriever, get_retriever_type
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
@@ -67,7 +67,7 @@ def train_retriever(
     args: Namespace, training_vectors: np.ndarray, use_gpu: bool = False
 ) -> Retriever:
     train_size, dim = training_vectors.shape
-    retriever_type = load_retriever(args.backend)
+    retriever_type = get_retriever_type(args.backend)
     dim = training_vectors.shape[1]
     cfg_dc = retriever_type.Config
     cfg_dict = {"dim": dim, "backend": args.backend, "metric": args.metric}

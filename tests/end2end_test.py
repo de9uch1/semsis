@@ -7,7 +7,7 @@ import pytest
 
 from semsis.encoder.sentence_encoder import SentenceEncoder
 from semsis.kvstore import KVStore
-from semsis.retriever.faiss import RetrieverFaiss
+from semsis.retriever.faiss_cpu import RetrieverFaissCPU
 
 TEXT = [
     "They listen to jazz and he likes jazz piano like Bud Powell.",
@@ -46,7 +46,7 @@ def test_end2end(tmp_path: Path, model, representation):
 
     # 2. Read the KVStore and build the kNN index.
     with KVStore.open(kvstore_path, mode="r") as kvstore:
-        retriever = RetrieverFaiss.build(RetrieverFaiss.Config(dim))
+        retriever = RetrieverFaissCPU.build(RetrieverFaissCPU.Config(dim))
         retriever.train(kvstore.key[:])
         retriever.add(kvstore.key[:], kvstore.value[:])
 
@@ -57,7 +57,7 @@ def test_end2end(tmp_path: Path, model, representation):
     del retriever
 
     # 4. Query.
-    retriever = RetrieverFaiss.load(index_path, cfg_path)
+    retriever = RetrieverFaissCPU.load(index_path, cfg_path)
     query_vectors = encoder.encode(QUERYS).numpy()
     distances, indices = retriever.search(query_vectors, k=1)
 

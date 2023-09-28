@@ -11,12 +11,12 @@ MetricType = int
 
 
 def faiss_index_builder(
-    cfg: "RetrieverFaiss.Config", dim: int, metric: MetricType
+    cfg: "RetrieverFaissCPU.Config", dim: int, metric: MetricType
 ) -> faiss.Index:
     """Build a faiss index from the given configuration.
 
     Args:
-        cfg (RetrieverFaiss.Config):
+        cfg (RetrieverFaissCPU.Config):
         dim (int):
         metric: MetricType
 
@@ -47,12 +47,12 @@ def faiss_index_builder(
 
 
 @register("faiss-cpu")
-class RetrieverFaiss(Retriever):
-    """Faiss retriever class.
+class RetrieverFaissCPU(Retriever):
+    """Faiss CPU retriever class.
 
     Args:
         index (faiss.Index): Index object.
-        cfg (FaissRetriever.Config): Configuration dataclass.
+        cfg (RetrieverFaissCPU.Config): Configuration dataclass.
     """
 
     index: faiss.Index
@@ -92,14 +92,14 @@ class RetrieverFaiss(Retriever):
         return self.index.ntotal
 
     @classmethod
-    def build(cls, cfg: "Config") -> "RetrieverFaiss":
+    def build(cls, cfg: "Config") -> "RetrieverFaissCPU":
         """Build this class from the given configuration.
 
         Args:
             cfg (Retriever.Config): Configuration.
 
         Returns:
-            RetrieverFaiss: This class with the constucted index object.
+            RetrieverFaissCPU: This class with the constucted index object.
         """
         metric = cls.METRICS_MAP[cfg.metric]
         dim = cfg.pca_dim if cfg.pca else cfg.dim

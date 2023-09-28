@@ -1,18 +1,11 @@
-from typing import Type
-
-from .base import REGISTRY, Retriever, register
-from .faiss import RetrieverFaiss
+from .base import Retriever, get_retriever_type, register
+from .faiss_cpu import RetrieverFaissCPU
 from .faiss_gpu import RetrieverFaissGPU
-
-
-def load_retriever(name: str) -> Type[Retriever]:
-    return REGISTRY[name]
-
 
 __all__ = [
     "Retriever",
-    "RetrieverFaiss",
+    "RetrieverFaissCPU",
     "RetrieverFaissGPU",
     "register",
-    "load_retriever",
+    "get_retriever_type",
 ]

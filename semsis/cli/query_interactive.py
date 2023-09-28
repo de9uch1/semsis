@@ -10,7 +10,7 @@ from typing import Generator, List
 import torch
 
 from semsis.encoder import SentenceEncoder
-from semsis.retriever import load_retriever
+from semsis.retriever import get_retriever_type
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
@@ -92,7 +92,7 @@ def main(args: Namespace) -> None:
             encoder = encoder.half()
         logger.info(f"The encoder is on the GPU.")
 
-    retriever_type = load_retriever(args.backend)
+    retriever_type = get_retriever_type(args.backend)
     retriever = retriever_type.load(args.index_path, args.config_path)
     retriever.set_efsearch(args.efsearch)
     retriever.set_nprobe(args.nprobe)

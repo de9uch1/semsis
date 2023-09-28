@@ -13,6 +13,7 @@ class Stopwatch:
         >>> print(f"{timer.total:.3f}")
         10.000
     """
+
     def __init__(self) -> None:
         self.reset()
 

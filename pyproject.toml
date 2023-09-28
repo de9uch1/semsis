@@ -2,8 +2,10 @@
 name = "semsis"
 version = "0.1.0"
 description = "A libary for semantic similarity search"
-authors = ["Hiroyuki Deguchi <deguchi.hiroyuki.db0@is.naist.jp>"]
+authors = ["Hiroyuki Deguchi <deguchi.hiroyuki@nict.go.jp>"]
+license = "MIT"
 readme = "README.rst"
+packages = [{include = "semsis"}]
 
 [tool.poetry.dependencies]
 python = "^3.8.1"

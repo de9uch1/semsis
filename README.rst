@@ -90,3 +90,7 @@ You can see the example of text search in `end2end_test.py <./tests/end2end.py>`
 
     assert indices.squeeze(1).tolist() == [2, 0, 2]
     assert np.isclose(distances[2, 0], 0.0)
+
+LICENSE
+=======
+This library is MIT-licensed.

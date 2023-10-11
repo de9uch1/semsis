@@ -59,6 +59,8 @@ def parse_args() -> Namespace:
                         help="Use PCA to reduce the dimension size.")
     parser.add_argument("--pca-dim", metavar="N", type=int, default=-1,
                         help="The dimension size which is reduced by PCA.")
+    parser.add_argument("--append-sequential", action="store_true",
+                        help="Append entries from the tail.")
     # fmt: on
     return parser.parse_args()
 
@@ -125,6 +127,9 @@ def main(args: Namespace) -> None:
         if use_gpu:
             retriever.to_gpu_add()
 
+        offset = 0
+        if args.append_sequential:
+            offset = len(retriever)
         logger.info(f"Build a retriever in {args.index_path}")
         with timer.measure():
             for i in tqdm(
@@ -135,7 +140,8 @@ def main(args: Namespace) -> None:
                 num_added = end_idx - start_idx
                 logger.info(f"Add vectors: {num_added:,} / {len(kvstore):,}")
                 retriever.add(
-                    kvstore.key[start_idx:end_idx], kvstore.value[start_idx:end_idx]
+                    kvstore.key[start_idx:end_idx],
+                    kvstore.value[start_idx:end_idx] + offset,
                 )
                 logger.info(f"Retriever index size: {len(retriever):,}")
 

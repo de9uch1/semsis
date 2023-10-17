@@ -179,13 +179,13 @@ class RetrieverFaissGPU(RetrieverFaissCPU):
                 # Temporarily replace the HNSW coarse quantizer with the flat index.
                 hnsw_cq = faiss.downcast_index(ivf.quantizer)
                 ivf.quantizer = faiss.downcast_index(hnsw_cq.storage)
-                self.gpu_ivf_index = faiss_index_to_gpu(ivf)
+                self.gpu_ivf_index = faiss_index_to_gpu(ivf, fp16=self.cfg.fp16)
 
                 # After transfering the IVF index with the flat coarse quantizer,
                 # the coarse quantizer of the master IVF index is restored to HNSW.
                 ivf.quantizer = hnsw_cq
             else:
-                self.gpu_ivf_index = faiss_index_to_gpu(ivf)
+                self.gpu_ivf_index = faiss_index_to_gpu(ivf, fp16=self.cfg.fp16)
             self.gpu_ivf_index.reset()
 
     def to_gpu_search(self) -> None:
@@ -195,7 +195,7 @@ class RetrieverFaissGPU(RetrieverFaissCPU):
             ivf_index.quantizer = faiss.downcast_index(
                 faiss.downcast_index(ivf_index.quantizer).storage
             )
-        self.index = faiss_index_to_gpu(self.index)
+        self.index = faiss_index_to_gpu(self.index, fp16=self.cfg.fp16)
         logger.info(f"The retriever index is on the GPU.")
 
     def to_cpu(self) -> None:
@@ -252,13 +252,11 @@ class RetrieverFaissGPU(RetrieverFaissCPU):
             vectors (ndarray): Key vectors to be added.
             ids (np.ndarray): Value indices.
         """
-        ivf = faiss.extract_index_ivf(self.index)
-        a0 = ivf.ntotal
-        a1 = a0 + vectors.shape[0]
+        ivf: faiss.IndexIVF = faiss.extract_index_ivf(self.index)
         self.gpu_ivf_index.add_with_ids(vectors, ids)
         cpu_ivf_index: faiss.IndexIVF = faiss_index_to_cpu(self.gpu_ivf_index)
         assert cpu_ivf_index.ntotal == vectors.shape[0]
-        faiss.extract_index_ivf(cpu_ivf_index).copy_subset_to(ivf, 0, a0, a1)
+        ivf.merge_from(cpu_ivf_index, 0)
         self.gpu_ivf_index.reset()
 
     def add(self, vectors: np.ndarray, ids: Optional[np.ndarray] = None) -> None:

@@ -28,6 +28,9 @@ INSTALLATION
 USAGE
 =====
 
+Case 1: Use in other python scripts
+-----------------------------------
+
 You can see the example of text search in `end2end_test.py <./tests/end2end_test.py>`_.
 
 1. Encode the sentences and store in a key--value store.
@@ -93,6 +96,13 @@ You can see the example of text search in `end2end_test.py <./tests/end2end_test
     assert indices.squeeze(1).tolist() == [2, 0, 2]
     assert np.isclose(distances[2, 0], 0.0)
 
+
+Case 2: Run on the command line
+-------------------------------
+
+See `semsis/cli/README.rst <./semsis/cli/README.rst>`_.
+
+
 LICENSE
 =======
-This library is MIT-licensed.
+This library is published under the MIT-license.

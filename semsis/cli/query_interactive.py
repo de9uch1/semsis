@@ -11,6 +11,7 @@ import torch
 
 from semsis.encoder import SentenceEncoder
 from semsis.retriever import get_retriever_type
+from semsis.retriever.base import load_backend_from_config
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
@@ -56,8 +57,6 @@ def parse_args() -> Namespace:
                         help="Model name")
     parser.add_argument("--representation", type=str, default="sbert", choices=["avg", "cls", "sbert"],
                         help="Sentence representation type.")
-    parser.add_argument("--backend", metavar="NAME", type=str, default="faiss-cpu",
-                        help="Backend of the search engine.")
     parser.add_argument("--gpu-encode", action="store_true",
                         help="Transfer the encoder to GPUs.")
     parser.add_argument("--gpu-retrieve", action="store_true",
@@ -92,7 +91,7 @@ def main(args: Namespace) -> None:
             encoder = encoder.half()
         logger.info(f"The encoder is on the GPU.")
 
-    retriever_type = get_retriever_type(args.backend)
+    retriever_type = load_backend_from_config(args.config_path)
     retriever = retriever_type.load(args.index_path, args.config_path)
     retriever.set_efsearch(args.efsearch)
     retriever.set_nprobe(args.nprobe)

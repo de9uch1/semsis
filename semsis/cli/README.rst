@@ -37,10 +37,10 @@ You can add entries from multiple key--value stores for two purposes.
 
 One is for the multi-key search.
 This registers multiple keys that have the same line number in the text files as a same record.
-For example, parallel pairs of neighboring cases can be searched if you encode each source side and target side of a parallel corpus using a multilingual sentence encoder, 
+For example, parallel sentences of neighboring cases can be searched if you encode each source side and target side of a parallel corpus using a multilingual sentence encoder, 
 
 The other one is for a large key--value store.
-This regards multiple key--value stores as sharded and each one is appended sequentialy by :code:`--append-sequential` option.
+This regards multiple key--value stores as sharded and each one is appended sequentially by :code:`--append-sequential` option.
 When adding an example to the index, the ID value is simply shifted by :code:`+ len(retriever)` and the example is appended from the end of the index.
 
 3. Query by :code:`query_interactive.py`.
@@ -53,7 +53,6 @@ In the default, the query text is read from the standard input.
           --index-path index.bin \
           --config-path index.yaml \
           --model sentenece-transformers/LaBSE --representation sbert \
-          --backend faiss-cpu \  # Specify the same backend as when building the retriever.
           --gpu-encode --fp16 \  # Use CUDA for encoding the query text.
           --buffer-size 1 \      # 1 means unbuffered.
           --topk 10
@@ -61,4 +60,4 @@ In the default, the query text is read from the standard input.
 If you input the query text interactively, I recommend to use `rlwrap <https://github.com/hanslub42/rlwrap>`_.
 
 :code:`--input` option reads the query text from a file instead of the standard input.
-If you use this option, I recommend to increase :code:`--buffer-size`.
+If you use this option, I recommend to increase :code:`--buffer-size` to speed up.

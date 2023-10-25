@@ -20,7 +20,7 @@ logging.basicConfig(
     level="INFO",
     stream=sys.stdout,
 )
-logger = logging.getLogger("semsis.cli.build_index")
+logger = logging.getLogger("semsis.cli.build_retriever")
 
 
 def parse_args() -> Namespace:

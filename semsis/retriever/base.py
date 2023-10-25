@@ -214,3 +214,16 @@ def register(name: str) -> Callable[[Type[T]], Type[T]]:
 
 def get_retriever_type(name: str) -> Type[Retriever]:
     return REGISTRY[name]
+
+
+def load_backend_from_config(cfg_path: PathLike) -> Type[Retriever]:
+    """Load the backend retriever type from the configuration file.
+
+    Args:
+        cfg_path (os.PathLike): Path to the configuration file.
+
+    Returns:
+        Type[Retriever]: The backend retriever type.
+    """
+    cfg = Retriever.Config.load(cfg_path)
+    return get_retriever_type(cfg.backend)

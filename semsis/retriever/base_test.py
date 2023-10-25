@@ -8,7 +8,13 @@ import numpy as np
 import pytest
 import yaml
 
-from semsis.retriever.base import REGISTRY, Retriever, get_retriever_type, register
+from semsis.retriever.base import (
+    REGISTRY,
+    Retriever,
+    get_retriever_type,
+    load_backend_from_config,
+    register,
+)
 
 D = 8
 
@@ -108,3 +114,16 @@ def test_register():
         @register("mock1")
         class MockClass3(RetrieverMock):
             ...
+
+
+def test_load_backend_from_config(tmp_path: Path):
+    backend = "mock"
+
+    @register(backend)
+    class MockClass(RetrieverMock):
+        ...
+
+    cfg = MockClass.Config(D, backend)
+    cfg_path = tmp_path / "cfg.yaml"
+    cfg.save(cfg_path)
+    assert issubclass(load_backend_from_config(cfg_path), MockClass)

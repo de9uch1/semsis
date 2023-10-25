@@ -5,9 +5,9 @@ SEMSIS: Semantic Similarity Search
 It is designed to focus on the following goals:
 
 - Simplicity: This library is not rich or complex and implements only the minimum necessary for semantic search.
-- Quality: Unit tests, docstrings, and type hints are all available.
-- Extensibility: Additional code can be implemented as needed, e.g., to use arbitrary search engines.
-- Efficiency: e.g., our :code:`RetrieverFaissGPU` overrides some methods of faiss for efficient computation.
+- Maintainability: Unit tests, docstrings, and type hints are all available.
+- Extensibility: Additional code can be implemented as needed easily.
+- Efficiency: Billion-scale indexes can be constructed efficiently. See `docs/technical_notes.rst <./docs/technical_notes.rst>`_ for details.
 
 
 REQUIREMENTS
@@ -28,8 +28,8 @@ INSTALLATION
 USAGE
 =====
 
-Case 1: Use in other python scripts
------------------------------------
+Case 1: Use semsis as API
+-------------------------
 
 You can see the example of text search in `end2end_test.py <./tests/end2end_test.py>`_.
 
@@ -97,8 +97,8 @@ You can see the example of text search in `end2end_test.py <./tests/end2end_test
     assert np.isclose(distances[2, 0], 0.0)
 
 
-Case 2: Run on the command line
--------------------------------
+Case 2: Use semsis as command line scripts
+------------------------------------------
 
 See `semsis/cli/README.rst <./semsis/cli/README.rst>`_.
 

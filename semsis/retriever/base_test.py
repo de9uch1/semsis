@@ -1,5 +1,5 @@
 import pickle
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from os import PathLike
 from pathlib import Path
 from typing import Any, Optional, Tuple
@@ -121,7 +121,10 @@ def test_load_backend_from_config(tmp_path: Path):
 
     @register(backend)
     class MockClass(RetrieverMock):
-        ...
+        @dataclass
+        class Config(RetrieverMock.Config):
+            foo: str = "foo"
+            bar: int = 3
 
     cfg = MockClass.Config(D, backend)
     cfg_path = tmp_path / "cfg.yaml"

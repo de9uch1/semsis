@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "semsis"
-version = "0.1.0"
+version = "0.1.1"
 description = "A libary for semantic similarity search"
 authors = ["Hiroyuki Deguchi <deguchi.hiroyuki@nict.go.jp>"]
 license = "MIT"

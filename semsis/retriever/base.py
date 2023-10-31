@@ -225,5 +225,6 @@ def load_backend_from_config(cfg_path: PathLike) -> Type[Retriever]:
     Returns:
         Type[Retriever]: The backend retriever type.
     """
-    cfg = Retriever.Config.load(cfg_path)
-    return get_retriever_type(cfg.backend)
+    with open(cfg_path, mode="r") as f:
+        cfg = yaml.safe_load(f)
+    return get_retriever_type(cfg["backend"])

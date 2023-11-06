@@ -53,15 +53,42 @@ class KVStore:
         self.key[ntotal:] = keys
         self.value[ntotal:] = values
 
-    def new(self, dim: int, dtype: DTypeLike = np.float32) -> None:
+    def new(
+        self,
+        dim: int,
+        dtype: DTypeLike = np.float32,
+        chunk_size: int = 1000,
+        compression: Optional[str] = None,
+        compression_opts: Optional[int] = None,
+    ) -> None:
         """Create the new arrays.
 
         Args:
             dim (int): The dimension size.
             dtype (DtypeLike): Dtype of the key array.
+            chunk_size (int): Vectors are chunked by this value in a HDF5 storage.
+            compression (str, optional): Compress the kvstore using the specified algorithm.
+            compression_opts (str, optional): Compress-level (0--9) for gzip compression.
+              If None, the default is `4` in gzip compression.
         """
-        self.f.create_dataset("key", shape=(0, dim), dtype=dtype, maxshape=(None, dim))
-        self.f.create_dataset("value", shape=(0,), dtype=np.int64, maxshape=(None,))
+        self.f.create_dataset(
+            "key",
+            shape=(0, dim),
+            dtype=dtype,
+            maxshape=(None, dim),
+            chunks=(chunk_size, dim),
+            compression=compression,
+            compression_opts=compression_opts,
+        )
+        self.f.create_dataset(
+            "value",
+            shape=(0,),
+            dtype=np.int64,
+            maxshape=(None,),
+            chunks=(chunk_size,),
+            compression=compression,
+            compression_opts=compression_opts,
+        )
 
     @classmethod
     @contextlib.contextmanager

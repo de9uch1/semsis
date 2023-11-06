@@ -1,3 +1,4 @@
+from typing import Optional
 import h5py
 import numpy as np
 import pytest
@@ -31,15 +32,18 @@ class TestKVStore:
         assert np.issubdtype(kvstore.dtype, dtype)
 
     @pytest.mark.parametrize("dtype", [np.float32, np.float16])
-    def test_new(self, f: h5py.File, dtype: DTypeLike):
+    @pytest.mark.parametrize("compression", [None, "gzip"])
+    def test_new(self, f: h5py.File, dtype: DTypeLike, compression: Optional[str]):
         kvstore = KVStore(f)
-        kvstore.new(D, dtype=dtype)
+        kvstore.new(D, dtype=dtype, compression=compression)
         k = kvstore.key
         v = kvstore.value
         assert isinstance(k, h5py.Dataset)
         assert isinstance(v, h5py.Dataset)
         assert np.issubdtype(k.dtype, dtype)
         assert np.issubdtype(v.dtype, np.int64)
+        assert k.compression == compression
+        assert v.compression == compression
         assert list(k.shape) == [0, D]
         assert list(v.shape) == [0]
         with pytest.raises(ValueError):

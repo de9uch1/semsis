@@ -90,7 +90,7 @@ def prepare_dataset(
     file: PathLike,
     tokenizer: Tokenizer,
     num_workers: int = 1,
-    chunk_size: int = 100000,
+    buffer_size: int = 100000,
 ) -> Dataset:
     """Prepare a dataset.
 
@@ -98,7 +98,7 @@ def prepare_dataset(
         file (os.PathLike): Input file.
         tokenizer (Tokenizer): Tokenizer.
         num_workers (int, optional): Number of workers.
-        chunk_size (int): Size of data processed by each process at a time.
+        buffer_size (int): Size of data processed by each process at a time.
 
     Returns:
         Dataset: A dataset dataclass.
@@ -111,7 +111,7 @@ def prepare_dataset(
         ) as executor:
             sequences = list(
                 tqdm(
-                    executor.map(tokenizer.tokenize, f, chunksize=chunk_size),
+                    executor.map(tokenizer.tokenize, f, chunksize=buffer_size),
                     desc="Preprocess the data",
                     mininterval=1,
                 )
@@ -142,8 +142,14 @@ def parse_args() -> Namespace:
                         help="Use FP16.")
     parser.add_argument("--workers", type=int, default=16,
                         help="Number of workers to preprocess the data.")
-    parser.add_argument("--chunk-size", type=int, default=100000,
-                        help="Chunk size for multi-processing.")
+    parser.add_argument("--buffer-size", type=int, default=100000,
+                        help="Buffer size for multi-processing.")
+    parser.add_argument("--chunk-size", type=int, default=1000,
+                        help="Chunk size in a HDF5 storage.")
+    parser.add_argument("--compression", type=str, default=None,
+                        help="Compression type for a HDF5 storage.")
+    parser.add_argument("--compression-opts", type=int, default=None,
+                        help="Compression-level for gzip compression.")
     # fmt: on
     return parser.parse_args()
 
@@ -157,7 +163,7 @@ def main(args: Namespace) -> None:
 
     logger.info(f"Start preprocessing the data")
     with timer.measure():
-        dataset = prepare_dataset(args.input, tokenizer, args.workers, args.chunk_size)
+        dataset = prepare_dataset(args.input, tokenizer, args.workers, args.buffer_size)
     logger.info(f"Dataset size: {len(dataset):,}")
     logger.info(f"Preprocessed the data in {timer.total:.1f} seconds.")
 
@@ -168,7 +174,13 @@ def main(args: Namespace) -> None:
 
     logger.info(f"Start storing the keys and values.")
     with KVStore.open(args.output, mode="w") as kvstore:
-        kvstore.new(encoder.get_embed_dim(), np.float16 if args.fp16 else np.float32)
+        kvstore.new(
+            encoder.get_embed_dim(),
+            np.float16 if args.fp16 else np.float32,
+            chunk_size=args.chunk_size,
+            compression=args.compression,
+            compression_opts=args.compression_opts,
+        )
 
         timer.reset()
         with timer.measure():

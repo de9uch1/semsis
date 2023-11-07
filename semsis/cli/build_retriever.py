@@ -123,7 +123,7 @@ def main(args: Namespace) -> None:
     with KVStore.open(args.kvstore, mode="r") as kvstore:
         training_vectors = kvstore.key[: min(args.train_size, len(kvstore))]
 
-        retriever = train_retriever(args, training_vectors)
+        retriever = train_retriever(args, training_vectors, use_gpu=use_gpu)
         if use_gpu:
             retriever.to_gpu_add()
 

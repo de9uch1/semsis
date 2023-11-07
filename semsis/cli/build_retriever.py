@@ -61,6 +61,8 @@ def parse_args() -> Namespace:
                         help="The dimension size which is reduced by PCA.")
     parser.add_argument("--append-sequential", action="store_true",
                         help="Append entries from the tail.")
+    parser.add_argument("--save-checkpoint", action="store_true",
+                        help="Save checkpoint after adding each key--value set.")
     # fmt: on
     return parser.parse_args()
 
@@ -152,7 +154,11 @@ def main(args: Namespace) -> None:
                     )
                     logger.info(f"Retriever index size: {len(retriever):,}")
 
+            if args.save_checkpoint:
                 retriever.save(args.index_path, args.config_path)
+
+        if not args.save_checkpoint:
+            retriever.save(args.index_path, args.config_path)
 
         logger.info(f"Added {len(retriever):,} datapoints")
         logger.info(f"Retriever index size: {len(retriever):,}")

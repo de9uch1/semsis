@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import contextlib
 import logging
 import math
 import os
@@ -26,8 +26,8 @@ logger = logging.getLogger("semsis.cli.build_retriever")
 def parse_args() -> Namespace:
     parser = ArgumentParser()
     # fmt: off
-    parser.add_argument("--kvstore", metavar="FILE", required=True,
-                        help="Path to a key--value store file.")
+    parser.add_argument("--kvstore", metavar="FILE", nargs="+", required=True,
+                        help="Path to key--value store files.")
     parser.add_argument("--index-path", metavar="FILE", required=True,
                         help="Path to an index file.")
     parser.add_argument("--trained-index-path", metavar="FILE",
@@ -120,35 +120,42 @@ def main(args: Namespace) -> None:
     timer = Stopwatch()
     use_gpu = torch.cuda.is_available() and not args.cpu
     chunk_size = args.chunk_size
-    with KVStore.open(args.kvstore, mode="r") as kvstore:
-        training_vectors = kvstore.key[: min(args.train_size, len(kvstore))]
-
+    with contextlib.ExitStack() as stack:
+        kvstores = [
+            stack.enter_context(KVStore.open(fname, mode="r")) for fname in args.kvstore
+        ]
+        training_vectors = np.concatenate(
+            [
+                kvstore.key[: min(args.train_size // len(kvstores), len(kvstore))]
+                for kvstore in kvstores
+            ]
+        )
         retriever = train_retriever(args, training_vectors, use_gpu=use_gpu)
         if use_gpu:
             retriever.to_gpu_add()
 
-        offset = 0
-        if args.append_sequential:
-            offset = len(retriever)
         logger.info(f"Build a retriever in {args.index_path}")
-        with timer.measure():
-            for i in tqdm(
-                range(math.ceil(len(kvstore) / chunk_size)), desc="Building a retriever"
-            ):
-                start_idx = i * chunk_size
-                end_idx = min(start_idx + chunk_size, len(kvstore))
-                num_added = end_idx - start_idx
-                logger.info(f"Add vectors: {num_added:,} / {len(kvstore):,}")
-                retriever.add(
-                    kvstore.key[start_idx:end_idx],
-                    kvstore.value[start_idx:end_idx] + offset,
-                )
-                logger.info(f"Retriever index size: {len(retriever):,}")
+        for kvstore in kvstores:
+            offset = len(retriever) if args.append_sequential else 0
+            with timer.measure():
+                for i in tqdm(
+                    range(math.ceil(len(kvstore) / chunk_size)),
+                    desc="Building a retriever",
+                ):
+                    start_idx = i * chunk_size
+                    end_idx = min(start_idx + chunk_size, len(kvstore))
+                    num_added = end_idx - start_idx
+                    logger.info(f"Add vectors: {num_added:,} / {len(kvstore):,}")
+                    retriever.add(
+                        kvstore.key[start_idx:end_idx],
+                        kvstore.value[start_idx:end_idx] + offset,
+                    )
+                    logger.info(f"Retriever index size: {len(retriever):,}")
 
-            retriever.save(args.index_path, args.config_path)
+                retriever.save(args.index_path, args.config_path)
 
-    logger.info(f"Added {len(retriever):,} datapoints")
-    logger.info(f"Retriever index size: {len(retriever):,}")
+        logger.info(f"Added {len(retriever):,} datapoints")
+        logger.info(f"Retriever index size: {len(retriever):,}")
     logger.info(f"Built the retriever in {timer.total:.1f} seconds")
 
 

@@ -138,6 +138,7 @@ def main(args: Namespace) -> None:
 
         logger.info(f"Build a retriever in {args.index_path}")
         for kvstore in kvstores:
+            logger.info(f"Add {len(kvstore):,} vectors from {kvstore.filename}")
             offset = len(retriever) if args.append_sequential else 0
             with timer.measure():
                 for i in tqdm(

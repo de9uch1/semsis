@@ -24,6 +24,10 @@ class TestKVStore:
         kvstore.new(D)
         assert len(kvstore) == 0
 
+    def test_filename(self, f: h5py.File):
+        kvstore = KVStore(f)
+        assert kvstore.filename == f.filename
+
     @pytest.mark.parametrize("dtype", [np.float32, np.float16])
     def test_dtype(self, f: h5py.File, dtype):
         kvstore = KVStore(f)

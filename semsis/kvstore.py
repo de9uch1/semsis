@@ -18,6 +18,11 @@ class KVStore:
         self.f = f
 
     @property
+    def filename(self) -> str:
+        """Returns the file name on the disk."""
+        return self.f.filename
+
+    @property
     def key(self) -> h5py.Dataset:
         """Return the key array."""
         return self.f["key"]

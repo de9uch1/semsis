@@ -1,5 +1,5 @@
 import abc
-from typing import Dict, List, Literal
+from typing import Dict, List
 
 import torch
 import torch.nn as nn
@@ -7,7 +7,11 @@ from sentence_transformers import SentenceTransformer
 from torch import Tensor
 from transformers import AutoModel
 
+from semsis import registry
+
 from .tokenizer import Tokenizer
+
+register, get_cls = registry.setup("sentence_encoder")
 
 
 class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
@@ -44,28 +48,17 @@ class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
         self.eval()
 
     @classmethod
-    def build(
-        cls,
-        model_name_or_path: str,
-        representation: Literal["avg", "cls", "sbert"],
-    ) -> "SentenceEncoder":
+    def build(cls, model_name_or_path: str, representation: str) -> "SentenceEncoder":
         """Build the sentence encoder model.
 
         Args:
             model_name_or_path (str): Model name or path of huggingface transformer models.
-            representation (Literal["avg", "cls", "sbert"]): Type of the sentence representation.
+            representation (str): Type of the sentence representation.
 
         Returns:
             SentenceEncoder: This class.
         """
-        if representation == "sbert":
-            return SentenceEncoderSbert(model_name_or_path)
-        elif representation == "avg":
-            return SentenceEncoderAvg(model_name_or_path)
-        elif representation == "cls":
-            return SentenceEncoderCls(model_name_or_path)
-        else:
-            raise NotImplementedError(f"`{representation}` is not supported.")
+        return get_cls(representation)(model_name_or_path)
 
     def encode(self, sentences: List[str]) -> Tensor:
         """Encode sentences into their sentence vectors.
@@ -100,6 +93,7 @@ class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
         return self.model.get_input_embeddings().embedding_dim
 
 
+@register("avg")
 class SentenceEncoderAvg(SentenceEncoder):
     def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
         """Return the feature vectors of the given inputs.
@@ -116,6 +110,7 @@ class SentenceEncoderAvg(SentenceEncoder):
         return active_hiddens.sum(dim=1) / non_pad_mask.sum(dim=1, keepdim=True)
 
 
+@register("cls")
 class SentenceEncoderCls(SentenceEncoder):
     def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
         """Return the feature vectors of the given inputs.
@@ -130,6 +125,7 @@ class SentenceEncoderCls(SentenceEncoder):
         return net_outputs["pooler_output"]
 
 
+@register("sbert")
 class SentenceEncoderSbert(SentenceEncoder):
     def load_model(self, name_or_path: str) -> None:
         """Load the model and tokenizer.

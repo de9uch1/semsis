@@ -10,8 +10,8 @@ from typing import Generator, List
 import torch
 
 from semsis.encoder import SentenceEncoder
-from semsis.retriever import get_retriever_type
-from semsis.retriever.base import load_backend_from_config
+from semsis.registry import get_registry
+from semsis.retriever import load_backend_from_config
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
@@ -55,7 +55,8 @@ def parse_args() -> Namespace:
                         help="Path to a configuration file.")
     parser.add_argument("--model", type=str, default="sentence-transformers/LaBSE",
                         help="Model name")
-    parser.add_argument("--representation", type=str, default="sbert", choices=["avg", "cls", "sbert"],
+    parser.add_argument("--representation", type=str, default="sbert",
+                        choices=get_registry("sentence_encoder").keys(),
                         help="Sentence representation type.")
     parser.add_argument("--gpu-encode", action="store_true",
                         help="Transfer the encoder to GPUs.")

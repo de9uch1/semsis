@@ -6,7 +6,7 @@ import faiss
 import numpy as np
 import torch
 
-from semsis.retriever.base import register
+from semsis.retriever import register
 from semsis.retriever.faiss_cpu import RetrieverFaissCPU
 
 logger = logging.getLogger(__name__)

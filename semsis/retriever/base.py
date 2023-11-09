@@ -1,10 +1,12 @@
 import abc
 from dataclasses import asdict, dataclass
 from os import PathLike
-from typing import Any, Callable, Optional, Tuple, Type, TypeVar
+from typing import Any, Optional, Tuple, Type, TypeVar
 
 import numpy as np
 import yaml
+
+from semsis import retriever
 
 T = TypeVar("T")
 
@@ -145,7 +147,7 @@ class Retriever(abc.ABC):
 
     @classmethod
     def load(cls: Type[T], index_path: PathLike, cfg_path: PathLike) -> T:
-        """Loads the index and its configuration.
+        """Load the index and its configuration.
 
         Args:
             index_path (os.PathLike): Index file path.
@@ -182,49 +184,20 @@ class Retriever(abc.ABC):
 
     @abc.abstractmethod
     def save_index(self, path: PathLike) -> None:
-        """Saves the index.
+        """Save the index.
 
         Args:
             path (os.PathLike): Index file path to save.
         """
 
+    @classmethod
+    def get_cls(cls, name: str) -> Type["Retriever"]:
+        """Return the retriever class from the given name.
 
-T = TypeVar("T")
+        Args:
+            name (str): Registered name.
 
-REGISTRY = {}
-
-
-def register(name: str) -> Callable[[Type[T]], Type[T]]:
-    """Register a retriever class as the given name.
-
-    Args:
-        name (str): The name of a class.
-    """
-
-    def _register(cls: Type[T]):
-        if name in REGISTRY:
-            raise ValueError(
-                f"{name} already registered as {REGISTRY[name].__name__}. ({cls.__name__})"
-            )
-        REGISTRY[name] = cls
-        return cls
-
-    return _register
-
-
-def get_retriever_type(name: str) -> Type[Retriever]:
-    return REGISTRY[name]
-
-
-def load_backend_from_config(cfg_path: PathLike) -> Type[Retriever]:
-    """Load the backend retriever type from the configuration file.
-
-    Args:
-        cfg_path (os.PathLike): Path to the configuration file.
-
-    Returns:
-        Type[Retriever]: The backend retriever type.
-    """
-    with open(cfg_path, mode="r") as f:
-        cfg = yaml.safe_load(f)
-    return get_retriever_type(cfg["backend"])
+        Returns:
+            Type[Retriever]: Retriever class.
+        """
+        return retriever.get_cls(name)

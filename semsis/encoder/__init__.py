@@ -3,6 +3,7 @@ from .sentence_encoder import (
     SentenceEncoderAvg,
     SentenceEncoderCls,
     SentenceEncoderSbert,
+    get_cls,
 )
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "SentenceEncoderAvg",
     "SentenceEncoderCls",
     "SentenceEncoderSbert",
+    "get_cls",
 ]

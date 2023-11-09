@@ -18,6 +18,7 @@ from transformers import BatchEncoding
 from semsis.encoder import SentenceEncoder
 from semsis.encoder.tokenizer import Tokenizer
 from semsis.kvstore import KVStore
+from semsis.registry import get_registry
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
@@ -134,7 +135,8 @@ def parse_args() -> Namespace:
                         help="Path to the key--value store.")
     parser.add_argument("--model", type=str, default="sentence-transformers/LaBSE",
                         help="Model name")
-    parser.add_argument("--representation", type=str, default="sbert", choices=["avg", "cls", "sbert"],
+    parser.add_argument("--representation", type=str, default="sbert",
+                        choices=get_registry("sentence_encoder").keys(),
                         help="Sentence representation type.")
     parser.add_argument("--batch-size", type=int, default=128,
                         help="Batch size.")

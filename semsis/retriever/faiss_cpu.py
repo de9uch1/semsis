@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 import faiss
 import numpy as np
 
-from semsis.retriever.base import Retriever, register
+from semsis.retriever import Retriever, register
 
 MetricType = int
 

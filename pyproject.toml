@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "semsis"
-version = "0.1.1"
+version = "0.1.2"
 description = "A libary for semantic similarity search"
 authors = ["Hiroyuki Deguchi <deguchi.hiroyuki@nict.go.jp>"]
 license = "MIT"
@@ -9,7 +9,7 @@ packages = [{include = "semsis"}]
 
 [tool.poetry.dependencies]
 python = "^3.8.1"
-torch = "2.0.0"
+torch = "^2.0.0"
 transformers = "^4.33.2"
 sentence-transformers = "^2.2.2"
 h5py = "^3.9.0"

@@ -24,14 +24,14 @@ logger = logging.getLogger("semsis.cli.query_interactive")
 
 
 def buffer_lines(
-    input: PathLike, buffer_size: int = 1
+    input: PathLike, buffer_size: int = 1, prefix_string: str = ""
 ) -> Generator[List[str], None, None]:
     buf: List[str] = []
     with fileinput.input(
         [input], mode="r", openhook=fileinput.hook_encoded("utf-8")
     ) as f:
         for line in f:
-            buf.append(line.strip())
+            buf.append(prefix_string + line.strip())
             if len(buf) >= buffer_size:
                 yield buf
                 buf = []
@@ -58,6 +58,9 @@ def parse_args() -> Namespace:
     parser.add_argument("--representation", type=str, default="sbert",
                         choices=get_registry("sentence_encoder").keys(),
                         help="Sentence representation type.")
+    parser.add_argument("--prefix-string", type=str, default="",
+                        help="Add the prefix string to each input text. "
+                        "This option is useful for intfloat/multilingual-e5-large.")
     parser.add_argument("--gpu-encode", action="store_true",
                         help="Transfer the encoder to GPUs.")
     parser.add_argument("--gpu-retrieve", action="store_true",
@@ -90,7 +93,7 @@ def main(args: Namespace) -> None:
         encoder = encoder.cuda()
         if args.fp16:
             encoder = encoder.half()
-        logger.info(f"The encoder is on the GPU.")
+        logger.info("The encoder is on the GPU.")
 
     retriever_type = load_backend_from_config(args.config_path)
     retriever = retriever_type.load(args.index_path, args.config_path)
@@ -107,7 +110,9 @@ def main(args: Namespace) -> None:
     nqueryed = 0
     acctimes = defaultdict(float)
     unit = "msec" if args.msec else "sec"
-    for lines in buffer_lines(args.input, buffer_size=args.buffer_size):
+    for lines in buffer_lines(
+        args.input, buffer_size=args.buffer_size, prefix_string=args.prefix_string
+    ):
         timers["encode"].reset()
         timers["retrieve"].reset()
         for _ in range(ntrials):

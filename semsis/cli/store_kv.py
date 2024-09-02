@@ -90,6 +90,7 @@ def set_pdeathsig(sig: int) -> None:
 def prepare_dataset(
     file: PathLike,
     tokenizer: Tokenizer,
+    prefix_string: str = "",
     num_workers: int = 1,
     chunk_size: int = 100000,
 ) -> Dataset:
@@ -98,25 +99,31 @@ def prepare_dataset(
     Args:
         file (os.PathLike): Input file.
         tokenizer (Tokenizer): Tokenizer.
+        prefix_string (str): Prefix string to be added to each input text.
         num_workers (int, optional): Number of workers.
         chunk_size (int): Size of data processed by each process at a time.
 
     Returns:
         Dataset: A dataset dataclass.
     """
-    with open(file, mode="r") as f:
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=num_workers,
-            initializer=set_pdeathsig,
-            initargs=(signal.SIGINT,),
-        ) as executor:
-            sequences = list(
-                tqdm(
-                    executor.map(tokenizer.tokenize, f, chunksize=chunk_size),
-                    desc="Preprocess the data",
-                    mininterval=1,
-                )
+
+    def readlines(file: PathLike) -> Generator[str, None, None]:
+        with open(file, mode="r") as f:
+            for line in f:
+                yield prefix_string + line.strip()
+
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=num_workers,
+        initializer=set_pdeathsig,
+        initargs=(signal.SIGINT,),
+    ) as executor:
+        sequences = list(
+            tqdm(
+                executor.map(tokenizer.tokenize, readlines(file), chunksize=chunk_size),
+                desc="Preprocess the data",
+                mininterval=1,
             )
+        )
 
     return Dataset(sequences, np.array([len(seq) for seq in sequences]))
 
@@ -138,6 +145,9 @@ def parse_args() -> Namespace:
     parser.add_argument("--representation", type=str, default="sbert",
                         choices=get_registry("sentence_encoder").keys(),
                         help="Sentence representation type.")
+    parser.add_argument("--prefix-string", type=str, default="",
+                        help="Add the prefix string to each input text. "
+                        "This option is useful for intfloat/multilingual-e5-large.")
     parser.add_argument("--batch-size", type=int, default=128,
                         help="Batch size.")
     parser.add_argument("--fp16", action="store_true",
@@ -157,9 +167,15 @@ def main(args: Namespace) -> None:
     encoder = SentenceEncoder.build(args.model, args.representation)
     tokenizer = encoder.tokenizer
 
-    logger.info(f"Start preprocessing the data")
+    logger.info("Start preprocessing the data")
     with timer.measure():
-        dataset = prepare_dataset(args.input, tokenizer, args.workers, args.chunk_size)
+        dataset = prepare_dataset(
+            args.input,
+            tokenizer,
+            prefix_string=args.prefix_string,
+            num_workers=args.workers,
+            chunk_size=args.chunk_size,
+        )
     logger.info(f"Dataset size: {len(dataset):,}")
     logger.info(f"Preprocessed the data in {timer.total:.1f} seconds.")
 
@@ -168,7 +184,7 @@ def main(args: Namespace) -> None:
         if args.fp16:
             encoder = encoder.half()
 
-    logger.info(f"Start storing the keys and values.")
+    logger.info("Start storing the keys and values.")
     with KVStore.open(args.output, mode="w") as kvstore:
         kvstore.new(encoder.get_embed_dim(), np.float16 if args.fp16 else np.float32)
 

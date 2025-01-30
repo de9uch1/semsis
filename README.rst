@@ -1,6 +1,15 @@
 SEMSIS: Semantic Similarity Search
 ##################################
 
+|PyPI version| |PyPI license| |CI|
+
+.. |PyPI version| image:: https://img.shields.io/pypi/v/semsis.svg
+   :target: https://pypi.python.org/pypi/semsis
+.. |PyPI license| image:: https://img.shields.io/pypi/l/semsis.svg
+   :target: https://pypi.python.org/pypi/semsis
+.. |CI| image:: https://github.com/de9uch1/semsis/actions/workflows/ci.yaml/badge.svg
+   :target: https://github.com/de9uch1/semsis
+
 *Semsis* is a library for semantic similarity search.
 It is designed to focus on the following goals:
 
@@ -19,11 +28,27 @@ REQUIREMENTS
 INSTALLATION
 ============
 
+via pip:
+
+.. code:: bash
+
+    pip install semsis
+
+from the source:
+
 .. code:: bash
 
     git clone https://github.com/de9uch1/semsis.git
     cd semsis/
     pip install ./
+
+from the source with uv:
+
+.. code:: bash
+
+    git clone https://github.com/de9uch1/semsis.git
+    cd semsis/
+    uv sync
 
 USAGE
 =====

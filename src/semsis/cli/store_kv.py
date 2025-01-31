@@ -97,7 +97,7 @@ def read_lines(file: StrPath, prefix_string: str = "") -> Generator[str, None, N
     """
     with open(file, mode="r") as f:
         for line in f:
-            yield prefix_string + line
+            yield prefix_string + line.strip()
 
 
 def prepare_dataset(
@@ -119,14 +119,27 @@ def prepare_dataset(
     Returns:
         Dataset: A dataset dataclass.
     """
-
-    with concurrent.futures.ProcessPoolExecutor(
+    sequences: list[list[int]] = []
+    if tokenizer.is_fast:
+        chunk = []
+        for line in tqdm(
+            read_lines(file, prefix_string=prefix_string),
+            desc="Preprocess the data",
+            mininterval=1,
+        ):
+            chunk.append(line)
+            if len(chunk) >= chunk_size:
+                sequences += tokenizer.tokenize_batch(chunk)
+                chunk = []
+        if len(chunk) > 0:
+            sequences += tokenizer.tokenize_batch(chunk)
+    else:
+        with concurrent.futures.ProcessPoolExecutor(
             max_workers=num_workers,
             initializer=set_pdeathsig,
             initargs=(signal.SIGINT,),
-    ) as executor:
-        sequences = list(
-            tqdm(
+        ) as executor:
+            for tokenized_chunk in tqdm(
                 executor.map(
                     tokenizer.tokenize,
                     read_lines(file, prefix_string=prefix_string),
@@ -134,8 +147,8 @@ def prepare_dataset(
                 ),
                 desc="Preprocess the data",
                 mininterval=1,
-            )
-        )
+            ):
+                sequences.append(tokenized_chunk)
 
     return Dataset(sequences, np.array([len(seq) for seq in sequences]))
 

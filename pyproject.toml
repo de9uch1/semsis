@@ -10,6 +10,7 @@ requires-python = ">=3.9"
 dependencies = [
     "h5py>=3.12.1",
     "sentence-transformers>=3.3.1",
+    "simple-parsing>=0.1.7",
     "torch>=2.0.0",
     "transformers>=4.47.1",
 ]

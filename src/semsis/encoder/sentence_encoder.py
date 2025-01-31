@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import abc
-from typing import Dict, List
 
 import torch
 import torch.nn as nn
@@ -60,11 +61,11 @@ class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
         """
         return get_cls(representation)(model_name_or_path)
 
-    def encode(self, sentences: List[str]) -> Tensor:
+    def encode(self, sentences: list[str]) -> Tensor:
         """Encode sentences into their sentence vectors.
 
         Args:
-            sentences (List[str]): Input sentences.
+            sentences (list[str]): Input sentences.
 
         Returns:
             Tensor: Sentence vectors of shape `(batch_size, embed_dim)`.
@@ -95,7 +96,7 @@ class SentenceEncoder(nn.Module, metaclass=abc.ABCMeta):
 
 @register("avg")
 class SentenceEncoderAvg(SentenceEncoder):
-    def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
+    def forward(self, net_inputs: dict[str, Tensor]) -> Tensor:
         """Return the feature vectors of the given inputs.
 
         Args:
@@ -112,7 +113,7 @@ class SentenceEncoderAvg(SentenceEncoder):
 
 @register("cls")
 class SentenceEncoderCls(SentenceEncoder):
-    def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
+    def forward(self, net_inputs: dict[str, Tensor]) -> Tensor:
         """Return the feature vectors of the given inputs.
 
         Args:
@@ -136,7 +137,7 @@ class SentenceEncoderSbert(SentenceEncoder):
         self.model = SentenceTransformer(name_or_path)
         self.tokenizer = Tokenizer(self.model.tokenizer)
 
-    def forward(self, net_inputs: Dict[str, Tensor]) -> Tensor:
+    def forward(self, net_inputs: dict[str, Tensor]) -> Tensor:
         """Return the feature vectors of the given inputs.
 
         Args:

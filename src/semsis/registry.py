@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Type, TypeVar
+from typing import Any, Callable, Type, TypeVar
 
 T = TypeVar("T")
 
@@ -41,13 +41,13 @@ def setup(registry_name: str):
     return register, get_cls
 
 
-def get_registry(registry_name: str) -> Dict[str, Type[Any]]:
+def get_registry(registry_name: str) -> dict[str, Type[Any]]:
     """Get registry of the given name.
 
     Args:
         registry_name (str): Registry name to be returned.
 
     Returns:
-        Dict[str, Type[Any]]: Class mapper from registered name to its corresponding class.
+        dict[str, Type[Any]]: Class mapper from registered name to its corresponding class.
     """
     return REGISTRIES[registry_name]

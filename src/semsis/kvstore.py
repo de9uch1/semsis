@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import contextlib
-from os import PathLike
-from typing import Any, Generator, Optional
+from typing import Generator, Optional
 
 import h5py
 import numpy as np
 from numpy.typing import DTypeLike
+
+from semsis.typing import NDArrayFloat, NDArrayI64, StrPath
 
 
 class KVStore:
@@ -41,12 +44,12 @@ class KVStore:
         """Return the dtype of the key array."""
         return self.key.dtype
 
-    def add(self, keys: np.ndarray, values: Optional[np.ndarray] = None) -> None:
+    def add(self, keys: NDArrayFloat, values: Optional[NDArrayI64] = None) -> None:
         """Add the given key vectors into the key array.
 
         Args:
-            keys (np.ndarray): The key vectors of shape `(n, dim)`.
-            values (np.ndarray, optional): The value IDs of shape `(n, dim)`.
+            keys (NDArrayFloat): The key vectors of shape `(n, dim)`.
+            values (NDArrayI64, optional): The value IDs of shape `(n, dim)`.
               If values are not given, value IDs will be assigned incrementally.
         """
         ntotal = len(self)
@@ -63,18 +66,18 @@ class KVStore:
 
         Args:
             dim (int): The dimension size.
-            dtype (DtypeLike): Dtype of the key array.
+            dtype (DTypeLike): Dtype of the key array.
         """
         self.f.create_dataset("key", shape=(0, dim), dtype=dtype, maxshape=(None, dim))
         self.f.create_dataset("value", shape=(0,), dtype=np.int64, maxshape=(None,))
 
     @classmethod
     @contextlib.contextmanager
-    def open(cls, path: PathLike, mode: str = "r") -> Generator["KVStore", Any, None]:
+    def open(cls, path: StrPath, mode: str = "r") -> Generator[KVStore, None, None]:
         """Open a binary file of this kvstore.
 
         Args:
-            path (os.PathLike): A path to the file.
+            path (StrPath): A path to the file.
             mode (str): Mode of this file objects.
               See https://docs.h5py.org/en/stable/high/file.html
 

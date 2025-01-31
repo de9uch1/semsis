@@ -1,4 +1,5 @@
-from typing import List, Union
+from __future__ import annotations
+from typing import Union
 
 from transformers import (
     AutoTokenizer,
@@ -15,7 +16,7 @@ class Tokenizer:
         self.tokenizer = tokenizer
 
     @classmethod
-    def build(cls, model_name_or_path: str) -> "Tokenizer":
+    def build(cls, model_name_or_path: str) -> Tokenizer:
         """Build the tokenizer.
 
         Args:
@@ -29,24 +30,24 @@ class Tokenizer:
     def __call__(self, *args, **kwargs):
         return self.tokenizer(*args, **kwargs)
 
-    def tokenize(self, sentence: str) -> List[int]:
+    def tokenize(self, sentence: str) -> list[int]:
         """Tokenize and convert a sentence to the token sequence.
 
         Args:
             sentence (str): An input sentence.
 
         Returns:
-            List[int]: A token ID sequence.
+            list[int]: A token ID sequence.
         """
         return self.tokenizer.encode(
             sentence, add_special_tokens=False, truncation=True
         )
 
-    def collate(self, samples: List[List[int]]) -> BatchEncoding:
+    def collate(self, samples: list[list[int]]) -> BatchEncoding:
         """Make a mini-batch from samples.
 
         Args:
-            samples (List[List[int]]): Token sequences.
+            samples (list[list[int]]): Token sequences.
 
         Returns:
             BatchEncoding: A mini-batch.

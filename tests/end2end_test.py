@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import json
 import math
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -30,7 +33,7 @@ BATCH_SIZE = 2
 @pytest.mark.parametrize(
     "model", ["bert-base-uncased", "sentence-transformers/all-MiniLM-L6-v2"]
 )
-def test_end2end(tmp_path: Path, model, representation):
+def test_end2end_py(tmp_path: Path, model, representation):
     # 1. Encode the sentences and store in a key--value store.
     encoder = SentenceEncoder.build(model, representation)
     dim = encoder.get_embed_dim()
@@ -63,6 +66,84 @@ def test_end2end(tmp_path: Path, model, representation):
 
     assert indices.squeeze(1).tolist() == [2, 0, 2]
     assert np.isclose(distances[2, 0], 0.0)
+
+
+@pytest.mark.parametrize("representation", ["cls", "avg", "sbert"])
+@pytest.mark.parametrize(
+    "model", ["bert-base-uncased", "sentence-transformers/all-MiniLM-L6-v2"]
+)
+def test_end2end_cli(tmp_path: Path, model: str, representation: str):
+    # 1. Encode the sentences and store in a key--value store.
+    with open(tmp_path / "text.txt", mode="w") as f:
+        for text in TEXT:
+            print(text, file=f)
+
+    encode_cmds: list[str] = [
+        sys.executable,
+        "-m",
+        "semsis.cli.store_kv",
+        "--input",
+        str(tmp_path / "text.txt"),
+        "--output",
+        str(tmp_path / "kv.bin"),
+        "--model",
+        model,
+        "--representation",
+        representation,
+    ]
+    subprocess.run(encode_cmds)
+
+    # 2. Read the KVStore and build the kNN index.
+    index_path = str(tmp_path / "index.bin")
+    cfg_path = str(tmp_path / "cfg.yaml")
+    index_cmds: list[str] = [
+        sys.executable,
+        "-m",
+        "semsis.cli.build_retriever",
+        "--kvstore",
+        str(tmp_path / "kv.bin"),
+        "--index_path",
+        index_path,
+        "--config_path",
+        cfg_path,
+    ]
+    subprocess.run(index_cmds)
+
+    # 3. Query.
+    query_path = str(tmp_path / "query.txt")
+    output_path = str(tmp_path / "output.json")
+    search_cmds: list[str] = [
+        sys.executable,
+        "-m",
+        "semsis.cli.query_interactive",
+        "--index_path",
+        index_path,
+        "--config_path",
+        cfg_path,
+        "--input",
+        query_path,
+        "--output",
+        output_path,
+        "--format",
+        "json",
+        "--model",
+        model,
+        "--representation",
+        representation,
+    ]
+
+    with open(query_path, mode="w") as f:
+        for query in QUERYS:
+            print(query, file=f)
+
+    subprocess.run(search_cmds)
+
+    with open(output_path, mode="r") as f:
+        for i, line in enumerate(f):
+            res = json.loads(line)
+            assert res["results"][0]["idx"] == [2, 0, 2][i]
+            if i == 2:
+                assert np.isclose(res["results"][0]["distance"], 0.0)
 
 
 if __name__ == "__main__":

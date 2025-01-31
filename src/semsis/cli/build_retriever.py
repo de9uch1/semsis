@@ -4,98 +4,92 @@ import logging
 import math
 import os
 import sys
-from argparse import ArgumentParser, Namespace
+from dataclasses import asdict, dataclass
+from typing import Optional
 
 import numpy as np
+import simple_parsing
 import torch
+from simple_parsing import field
 from tqdm import tqdm
 
 from semsis.kvstore import KVStore
-from semsis.retriever import Retriever
+from semsis.retriever import Metric, Retriever
+from semsis.retriever.base import RetrieverParam
+from semsis.typing import NDArrayFloat
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     level="INFO",
-    stream=sys.stdout,
+    stream=sys.stderr,
 )
 logger = logging.getLogger("semsis.cli.build_retriever")
 
 
-def parse_args() -> Namespace:
-    parser = ArgumentParser()
-    # fmt: off
-    parser.add_argument("--kvstore", metavar="FILE", nargs="+", required=True,
-                        help="Path to key--value store files.")
-    parser.add_argument("--index-path", metavar="FILE", required=True,
-                        help="Path to an index file.")
-    parser.add_argument("--trained-index-path", metavar="FILE",
-                        help="Path to a trained index file. If this option is not specified, "
-                        "the final index path will be set.")
-    parser.add_argument("--config-path", metavar="FILE", required=True,
-                        help="Path to a configuration file.")
-    parser.add_argument("--cpu", action="store_true",
-                        help="Only use CPU.")
-    parser.add_argument("--fp16", action="store_true",
-                        help="Use FP16.")
-    parser.add_argument("--backend", metavar="NAME", type=str, default="faiss-cpu",
-                        help="Backend of the search engine.")
-    parser.add_argument("--metric", metavar="TYPE", default="l2", choices=["l2", "ip", "cos"],
-                        help="Distance function.")
-    parser.add_argument("--chunk-size", metavar="N", type=int, default=1000000,
-                        help="The number of data to be loaded at a time.")
-    parser.add_argument("--train-size", metavar="N", type=int, default=1000000,
-                        help="The number of training data.")
-    parser.add_argument("--hnsw-nlinks", metavar="N", type=int, default=0,
-                        help="[HNSW] The number of links per node.")
-    parser.add_argument("--ivf-nlists", metavar="N", type=int, default=0,
-                        help="[IVF] The number of centroids")
-    parser.add_argument("--pq-nblocks", metavar="N", type=int, default=0,
-                        help="[PQ] The number of sub-vectors")
-    parser.add_argument("--opq", action="store_true",
-                        help="Use OPQ to minimize the quantization error.")
-    parser.add_argument("--pca", action="store_true",
-                        help="Use PCA to reduce the dimension size.")
-    parser.add_argument("--pca-dim", metavar="N", type=int, default=-1,
-                        help="The dimension size which is reduced by PCA.")
-    parser.add_argument("--append-sequential", action="store_true",
-                        help="Append entries from the tail.")
-    parser.add_argument("--save-checkpoint", action="store_true",
-                        help="Save checkpoint after adding each key--value set.")
-    # fmt: on
-    return parser.parse_args()
+@dataclass
+class Config:
+    """Configuraiton for build_retriever"""
+
+    # Path to an index file.
+    index_path: str = field()
+    # Path to an index configuration file.
+    config_path: str = field()
+    # Path to key--value store files.
+    kvstore: list[str] = field(nargs="+")
+
+    # Path to a trained index file.
+    # If this option is not specified, the index path will be set.
+    trained_index_path: Optional[str] = None
+    # Only use CPU.
+    cpu: bool = False
+    # Backend of the search engine.
+    backend: str = "faiss-cpu"
+    # Distance function.
+    metric: Metric = Metric.l2
+    # The number of data to be loaded at a time.
+    chunk_size: int = 1000000
+    # The number of training data of the index.
+    train_size: int = 1000000
+    # Append entries to the tail.
+    append_sequential: bool = False
+    # Save checkpoint after adding each key--value set.
+    save_checkpoint: bool = False
+
+
+def parse_args() -> tuple[Config, RetrieverParam]:
+    parser = simple_parsing.ArgumentParser()
+    parser.add_arguments(Config, "common")
+    parser.add_arguments(RetrieverParam, "retriever_param")
+    args = parser.parse_args()
+    return args.common, args.retriever_param
 
 
 def train_retriever(
-    args: Namespace, training_vectors: np.ndarray, use_gpu: bool = False
+    args: Config,
+    retriever_param: RetrieverParam,
+    training_vectors: NDArrayFloat,
+    use_gpu: bool = False,
 ) -> Retriever:
     train_size, dim = training_vectors.shape
     retriever_type = Retriever.get_cls(args.backend)
     dim = training_vectors.shape[1]
-    cfg_dc = retriever_type.Config
-    cfg_dict = {"dim": dim, "backend": args.backend, "metric": args.metric}
 
-    def set_if_hasattr(name: str):
-        if hasattr(cfg_dc, name):
-            cfg_dict[name] = getattr(args, name)
-
-    set_if_hasattr("hnsw_nlinks")
-    set_if_hasattr("ivf_nlists")
-    set_if_hasattr("pq_nblocks")
-    set_if_hasattr("opq")
-    set_if_hasattr("pca")
-    set_if_hasattr("pca_dim")
-    set_if_hasattr("fp16")
-    cfg = retriever_type.Config(**cfg_dict)
+    cfg = retriever_type.Config(
+        dim=dim,
+        backend=args.backend,
+        metric=args.metric,
+        **{
+            k: v
+            for k, v in asdict(retriever_param).items()
+            if hasattr(retriever_type.Config, k)
+        },
+    )
     logger.info(cfg)
     logger.info(f"Input vector: {cfg.dim} dimension")
 
-    if getattr(args, "trained_index_path", None):
-        trained_index_path = args.trained_index_path
-    else:
-        trained_index_path = args.index_path
-
+    trained_index_path = args.trained_index_path or args.index_path
     if os.path.exists(trained_index_path):
         trained_retriever = retriever_type.load(trained_index_path, args.config_path)
         if trained_retriever.cfg == cfg:
@@ -116,7 +110,7 @@ def train_retriever(
     return retriever_type.load(trained_index_path, args.config_path)
 
 
-def main(args: Namespace) -> None:
+def main(args: Config, retriever_param: RetrieverParam) -> None:
     logger.info(args)
 
     timer = Stopwatch()
@@ -126,13 +120,15 @@ def main(args: Namespace) -> None:
         kvstores = [
             stack.enter_context(KVStore.open(fname, mode="r")) for fname in args.kvstore
         ]
-        training_vectors = np.concatenate(
+        training_vectors: NDArrayFloat = np.concatenate(
             [
                 kvstore.key[: min(args.train_size // len(kvstores), len(kvstore))]
                 for kvstore in kvstores
             ]
         )
-        retriever = train_retriever(args, training_vectors, use_gpu=use_gpu)
+        retriever = train_retriever(
+            args, retriever_param, training_vectors, use_gpu=use_gpu
+        )
         if use_gpu:
             retriever.to_gpu_add()
 
@@ -167,8 +163,8 @@ def main(args: Namespace) -> None:
 
 
 def cli_main() -> None:
-    args = parse_args()
-    main(args)
+    args, retriever_param = parse_args()
+    main(args, retriever_param)
 
 
 if __name__ == "__main__":

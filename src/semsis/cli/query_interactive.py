@@ -1,32 +1,37 @@
 #!/usr/bin/env python3
+import argparse
+import enum
 import fileinput
+import json
 import logging
 import sys
-from argparse import ArgumentParser, Namespace
 from collections import defaultdict
-from os import PathLike
-from typing import Generator, List
+from dataclasses import dataclass
+from typing import Generator
 
+import simple_parsing
 import torch
+from simple_parsing.helpers.fields import choice, field
 
 from semsis.encoder import SentenceEncoder
 from semsis.registry import get_registry
 from semsis.retriever import load_backend_from_config
+from semsis.typing import StrPath
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     level="INFO",
-    stream=sys.stdout,
+    stream=sys.stderr,
 )
 logger = logging.getLogger("semsis.cli.query_interactive")
 
 
 def buffer_lines(
-    input: PathLike, buffer_size: int = 1
-) -> Generator[List[str], None, None]:
-    buf: List[str] = []
+    input: StrPath, buffer_size: int = 1
+) -> Generator[list[str], None, None]:
+    buf: list[str] = []
     with fileinput.input(
         [input], mode="r", openhook=fileinput.hook_encoded("utf-8")
     ) as f:
@@ -39,58 +44,64 @@ def buffer_lines(
             yield buf
 
 
-def parse_args() -> Namespace:
-    """Parses the command line arguments.
-
-    Returns:
-        Namespace: Command line arguments.
-    """
-    parser = ArgumentParser()
-    # fmt: off
-    parser.add_argument("--input", type=str, default="-",
-                        help="Input file.")
-    parser.add_argument("--index-path", metavar="FILE",
-                        help="Path to an index file.")
-    parser.add_argument("--config-path", metavar="FILE", required=True,
-                        help="Path to a configuration file.")
-    parser.add_argument("--model", type=str, default="sentence-transformers/LaBSE",
-                        help="Model name")
-    parser.add_argument("--representation", type=str, default="sbert",
-                        choices=get_registry("sentence_encoder").keys(),
-                        help="Sentence representation type.")
-    parser.add_argument("--gpu-encode", action="store_true",
-                        help="Transfer the encoder to GPUs.")
-    parser.add_argument("--gpu-retrieve", action="store_true",
-                        help="Transfer the retriever to GPUs.")
-    parser.add_argument("--fp16", action="store_true",
-                        help="Use FP16.")
-    parser.add_argument("--ntrials", type=int, default=1,
-                        help="Number of trials to measure the search time.")
-    parser.add_argument("--topk", type=int, default=1,
-                        help="Search the top-k nearest neighbor.")
-    parser.add_argument("--buffer-size", type=int, default=1,
-                        help="Buffer size to query at a time.")
-    parser.add_argument("--msec", action="store_true",
-                        help="Show the search time in milli seconds instead of seconds.")
-    parser.add_argument("--efsearch", type=int, default=16,
-                        help="Set the efSearch parameter for the HNSW indexes. "
-                        "This corresponds to the beam width at the search time.")
-    parser.add_argument("--nprobe", type=int, default=8,
-                        help="Set the nprobe parameter for the IVF indexes. "
-                        "This corresponds to the number of neighboring clusters to be searched.")
-    # fmt: on
-    return parser.parse_args()
+class Format(str, enum.Enum):
+    plain = "plain"
+    json = "json"
 
 
-def main(args: Namespace) -> None:
+@dataclass
+class Config:
+    """Configuration for query_interactive"""
+
+    # Path to an index file.
+    index_path: str
+    # Path to an index configuration file.
+    config_path: str
+
+    # Path to an input file. If not specified, read from the standard input.
+    input: str = "-"
+    # Path to an output file.
+    output: argparse.FileType("w") = field(default="-")
+    # Output format.
+    format: Format = Format.plain
+    # Model name.
+    model: str = "sentence-transformers/LaBSE"
+    # Type of sentence representation.
+    representation: str = choice(
+        *get_registry("sentence_encoder").keys(), default="sbert"
+    )
+
+    # Use fp16.
+    fp16: bool = False
+    # Buffer size to query at a time.
+    buffer_size: int = 128
+    # Transfer the encoder to GPUs.
+    gpu_encode: bool = False
+    # Transfer the retriever to GPUs.
+    gpu_retrieve: bool = False
+    # Number of trials to measure the search time.
+    ntrials: int = 1
+    # Search the top-k nearest neighbor.
+    topk: int = 1
+    # Show the search time in milli seconds instead of seconds.
+    msec: bool = False
+    # Set the efSearch parameter for the HNSW indexes.
+    # This corresponds to the beam width at the search time.
+    efsearch: int = 16
+    # Set the nprobe parameter for the IVF indexes.
+    # This corresponds to the number of neighboring clusters to be searched.
+    nprobe: int = 8
+
+
+def main(args: Config) -> None:
     logger.info(args)
 
     encoder = SentenceEncoder.build(args.model, args.representation)
     if torch.cuda.is_available() and args.gpu_encode:
-        encoder = encoder.cuda()
         if args.fp16:
             encoder = encoder.half()
-        logger.info(f"The encoder is on the GPU.")
+        encoder = encoder.cuda()
+        logger.info("The encoder is on the GPU.")
 
     retriever_type = load_backend_from_config(args.config_path)
     retriever = retriever_type.load(args.index_path, args.config_path)
@@ -101,6 +112,9 @@ def main(args: Namespace) -> None:
     logger.info(f"Retriever configuration: {retriever.cfg}")
     logger.info(f"Retriever index size: {len(retriever):,}")
 
+    def _print(string: str):
+        print(string, file=args.output)
+
     timers = defaultdict(Stopwatch)
     ntrials = args.ntrials
     start_id = 0
@@ -110,7 +124,12 @@ def main(args: Namespace) -> None:
     for lines in buffer_lines(args.input, buffer_size=args.buffer_size):
         timers["encode"].reset()
         timers["retrieve"].reset()
-        for _ in range(ntrials):
+
+        with timers["encode"].measure():
+            querys = encoder.encode(lines).cpu().numpy()
+        with timers["retrieve"].measure():
+            dists, idxs = retriever.search(querys, k=args.topk)
+        for _ in range(ntrials - 1):
             with timers["encode"].measure():
                 querys = encoder.encode(lines).cpu().numpy()
             with timers["retrieve"].measure():
@@ -118,11 +137,26 @@ def main(args: Namespace) -> None:
 
         for i, line in enumerate(lines):
             uid = start_id + i
-            dist_str = " ".join([f"{x:.3f}" for x in dists[i].tolist()])
-            idx_str = " ".join([str(x) for x in idxs[i].tolist()])
-            print(f"Q-{uid}\t{line}")
-            print(f"D-{uid}\t{dist_str}")
-            print(f"I-{uid}\t{idx_str}")
+
+            # python<=3.9 does not support the match statement.
+            if args.format == Format.plain:
+                dist_str = " ".join([f"{x:.3f}" for x in dists[i].tolist()])
+                idx_str = " ".join([str(x) for x in idxs[i].tolist()])
+                _print(f"Q-{uid}\t{line}")
+                _print(f"D-{uid}\t{dist_str}")
+                _print(f"I-{uid}\t{idx_str}")
+            elif args.format == Format.json:
+                res = {
+                    "i": uid,
+                    "query": line,
+                    "results": [
+                        {"rank": rank, "distance": distance, "idx": idx}
+                        for rank, (distance, idx) in enumerate(
+                            zip(dists[i].tolist(), idxs[i].tolist())
+                        )
+                    ],
+                }
+                _print(json.dumps(res, ensure_ascii=False))
 
         times = {k: timer.total for k, timer in timers.items()}
         times["search"] = sum([timer.total for timer in timers.values()])
@@ -135,8 +169,8 @@ def main(args: Namespace) -> None:
         for name, c in [("encode", "E"), ("retrieve", "R"), ("search", "S")]:
             t = times[name]
             at = times[name] / ntrials
-            print(f"T{c}-{start_id}:{nqueryed}\t{t:.1f} {unit}")
-            print(f"AT{c}-{start_id}:{nqueryed}\t{at:.1f} {unit}")
+            logger.info(f"T{c}-{start_id}:{nqueryed}\t{t:.1f} {unit}")
+            logger.info(f"AT{c}-{start_id}:{nqueryed}\t{at:.1f} {unit}")
 
         start_id = nqueryed
 
@@ -147,13 +181,15 @@ def main(args: Namespace) -> None:
         single_avgtimes[k] = v / (nqueryed * ntrials)
 
     for k in acctimes.keys():
-        print(f"Total {k} time: {acctimes[k]:.1f} {unit}")
-        print(f"Average {k} time per batch: {batch_avgtimes[k]:.1f} {unit}")
-        print(f"Average {k} time per single query: {single_avgtimes[k]:.1f} {unit}")
+        logger.info(f"Total {k} time: {acctimes[k]:.1f} {unit}")
+        logger.info(f"Average {k} time per batch: {batch_avgtimes[k]:.1f} {unit}")
+        logger.info(
+            f"Average {k} time per single query: {single_avgtimes[k]:.1f} {unit}"
+        )
 
 
 def cli_main() -> None:
-    args = parse_args()
+    args = simple_parsing.parse(Config)
     main(args)
 
 

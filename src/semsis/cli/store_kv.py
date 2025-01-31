@@ -5,13 +5,13 @@ import logging
 import math
 import signal
 import sys
-from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
-from os import PathLike
-from typing import Generator, List
+from typing import Generator
 
 import numpy as np
+import simple_parsing
 import torch
+from simple_parsing.helpers.fields import choice
 from tqdm import tqdm
 from transformers import BatchEncoding
 
@@ -19,13 +19,14 @@ from semsis.encoder import SentenceEncoder
 from semsis.encoder.tokenizer import Tokenizer
 from semsis.kvstore import KVStore
 from semsis.registry import get_registry
+from semsis.typing import NDArrayFloat, NDArrayI64, StrPath
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     level="INFO",
-    stream=sys.stdout,
+    stream=sys.stderr,
 )
 logger = logging.getLogger("semsis.cli.store_kv")
 
@@ -35,23 +36,23 @@ class Batch:
     """Mini-batch class.
 
     inputs (BatchEncoding): Model inputs.
-    ids (np.ndarray): Sample IDs.
+    ids (NDArrayI64): Sample IDs.
     """
 
     inputs: BatchEncoding
-    ids: np.ndarray
+    ids: NDArrayI64
 
 
 @dataclass
 class Dataset:
     """Dataset class.
 
-    sequences (List[List[int]]): Token ID sequences.
-    lengths (np.ndarray): Lengths of each sequence.
+    sequences (list[list[int]]): Token ID sequences.
+    lengths (NDArrayI64): Lengths of each sequence.
     """
 
-    sequences: List[List[int]]
-    lengths: np.ndarray
+    sequences: list[list[int]]
+    lengths: NDArrayI64
 
     def __len__(self):
         return len(self.lengths)
@@ -88,7 +89,7 @@ def set_pdeathsig(sig: int) -> None:
 
 
 def prepare_dataset(
-    file: PathLike,
+    file: StrPath,
     tokenizer: Tokenizer,
     num_workers: int = 1,
     chunk_size: int = 100000,
@@ -96,7 +97,7 @@ def prepare_dataset(
     """Prepare a dataset.
 
     Args:
-        file (os.PathLike): Input file.
+        file (StrPath): Input file.
         tokenizer (Tokenizer): Tokenizer.
         num_workers (int, optional): Number of workers.
         chunk_size (int): Size of data processed by each process at a time.
@@ -121,43 +122,38 @@ def prepare_dataset(
     return Dataset(sequences, np.array([len(seq) for seq in sequences]))
 
 
-def parse_args() -> Namespace:
-    """Parses the command line arguments.
+@dataclass
+class Config:
+    """Configuration for store_kv"""
 
-    Returns:
-        Namespace: Command line arguments.
-    """
-    parser = ArgumentParser()
-    # fmt: off
-    parser.add_argument("--input", type=str, required=True,
-                        help="Input file.")
-    parser.add_argument("--output", type=str, default="kv.bin",
-                        help="Path to the key--value store.")
-    parser.add_argument("--model", type=str, default="sentence-transformers/LaBSE",
-                        help="Model name")
-    parser.add_argument("--representation", type=str, default="sbert",
-                        choices=get_registry("sentence_encoder").keys(),
-                        help="Sentence representation type.")
-    parser.add_argument("--batch-size", type=int, default=128,
-                        help="Batch size.")
-    parser.add_argument("--fp16", action="store_true",
-                        help="Use FP16.")
-    parser.add_argument("--workers", type=int, default=16,
-                        help="Number of workers to preprocess the data.")
-    parser.add_argument("--chunk-size", type=int, default=100000,
-                        help="Chunk size for multi-processing.")
-    # fmt: on
-    return parser.parse_args()
+    # Path to an input file.
+    input: str
+    # Path to the key-value store file.
+    output: str = "kv.bin"
+    # Model name.
+    model: str = "sentence-transformers/LaBSE"
+    # Type of sentence representation.
+    representation: str = choice(
+        *get_registry("sentence_encoder").keys(), default="sbert"
+    )
+    # Use fp16.
+    fp16: bool = False
+    # Batch size.
+    batch_size: int = 128
+    # Number of workers for preprocessing the data.
+    workers: int = 16
+    # Chunk size for multi-processing.
+    chunk_size: int = 100000
 
 
-def main(args: Namespace) -> None:
+def main(args: Config) -> None:
     logger.info(args)
 
     timer = Stopwatch()
     encoder = SentenceEncoder.build(args.model, args.representation)
     tokenizer = encoder.tokenizer
 
-    logger.info(f"Start preprocessing the data")
+    logger.info("Start preprocessing the data")
     with timer.measure():
         dataset = prepare_dataset(args.input, tokenizer, args.workers, args.chunk_size)
     logger.info(f"Dataset size: {len(dataset):,}")
@@ -168,14 +164,14 @@ def main(args: Namespace) -> None:
         if args.fp16:
             encoder = encoder.half()
 
-    logger.info(f"Start storing the keys and values.")
+    logger.info("Start storing the keys and values.")
     with KVStore.open(args.output, mode="w") as kvstore:
         kvstore.new(encoder.get_embed_dim(), np.float16 if args.fp16 else np.float32)
 
         timer.reset()
         with timer.measure():
             for batch in dataset.yield_batches(tokenizer, args.batch_size):
-                sentence_vectors = (
+                sentence_vectors: NDArrayFloat = (
                     encoder(batch.inputs.to(encoder.device)).cpu().numpy()
                 )
                 kvstore.add(sentence_vectors, batch.ids)
@@ -183,7 +179,7 @@ def main(args: Namespace) -> None:
 
 
 def cli_main() -> None:
-    args = parse_args()
+    args = simple_parsing.parse(Config)
     main(args)
 
 

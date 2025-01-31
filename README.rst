@@ -59,7 +59,7 @@ Case 1: Use semsis as API
 You can see the example of text search in `end2end_test.py <./tests/end2end_test.py>`_.
 
 Note that this example is not optimized for billion-scale index construction.
-If you find the efficient implementation, please see `semsis/cli/README.rst <./semsis/cli/README.rst>`_.
+If you find the efficient implementation, please see `src/semsis/cli/README.rst <./src/semsis/cli/README.rst>`_.
 
 1. Encode the sentences and store in a key--value store.
 
@@ -129,7 +129,7 @@ Case 2: Use semsis as command line scripts
 ------------------------------------------
 
 Command line scripts are carefully designed to run efficiently for the billion-scale search.
-See `semsis/cli/README.rst <./semsis/cli/README.rst>`_.
+See `src/semsis/cli/README.rst <./src/semsis/cli/README.rst>`_.
 
 
 LICENSE

@@ -2,31 +2,33 @@
 import fileinput
 import logging
 import sys
-from argparse import ArgumentParser, Namespace
 from collections import defaultdict
-from os import PathLike
-from typing import Generator, List
+from dataclasses import dataclass
+from typing import Generator
 
+import simple_parsing
 import torch
+from simple_parsing.helpers.fields import choice
 
 from semsis.encoder import SentenceEncoder
 from semsis.registry import get_registry
 from semsis.retriever import load_backend_from_config
+from semsis.typing import StrPath
 from semsis.utils import Stopwatch
 
 logging.basicConfig(
     format="| %(asctime)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     level="INFO",
-    stream=sys.stdout,
+    stream=sys.stderr,
 )
 logger = logging.getLogger("semsis.cli.query_interactive")
 
 
 def buffer_lines(
-    input: PathLike, buffer_size: int = 1
-) -> Generator[List[str], None, None]:
-    buf: List[str] = []
+    input: StrPath, buffer_size: int = 1
+) -> Generator[list[str], None, None]:
+    buf: list[str] = []
     with fileinput.input(
         [input], mode="r", openhook=fileinput.hook_encoded("utf-8")
     ) as f:
@@ -39,58 +41,55 @@ def buffer_lines(
             yield buf
 
 
-def parse_args() -> Namespace:
-    """Parses the command line arguments.
+@dataclass
+class Config:
+    """Configuration for query_interactive"""
 
-    Returns:
-        Namespace: Command line arguments.
-    """
-    parser = ArgumentParser()
-    # fmt: off
-    parser.add_argument("--input", type=str, default="-",
-                        help="Input file.")
-    parser.add_argument("--index-path", metavar="FILE",
-                        help="Path to an index file.")
-    parser.add_argument("--config-path", metavar="FILE", required=True,
-                        help="Path to a configuration file.")
-    parser.add_argument("--model", type=str, default="sentence-transformers/LaBSE",
-                        help="Model name")
-    parser.add_argument("--representation", type=str, default="sbert",
-                        choices=get_registry("sentence_encoder").keys(),
-                        help="Sentence representation type.")
-    parser.add_argument("--gpu-encode", action="store_true",
-                        help="Transfer the encoder to GPUs.")
-    parser.add_argument("--gpu-retrieve", action="store_true",
-                        help="Transfer the retriever to GPUs.")
-    parser.add_argument("--fp16", action="store_true",
-                        help="Use FP16.")
-    parser.add_argument("--ntrials", type=int, default=1,
-                        help="Number of trials to measure the search time.")
-    parser.add_argument("--topk", type=int, default=1,
-                        help="Search the top-k nearest neighbor.")
-    parser.add_argument("--buffer-size", type=int, default=1,
-                        help="Buffer size to query at a time.")
-    parser.add_argument("--msec", action="store_true",
-                        help="Show the search time in milli seconds instead of seconds.")
-    parser.add_argument("--efsearch", type=int, default=16,
-                        help="Set the efSearch parameter for the HNSW indexes. "
-                        "This corresponds to the beam width at the search time.")
-    parser.add_argument("--nprobe", type=int, default=8,
-                        help="Set the nprobe parameter for the IVF indexes. "
-                        "This corresponds to the number of neighboring clusters to be searched.")
-    # fmt: on
-    return parser.parse_args()
+    # Path to an index file.
+    index_path: str
+    # Path to an index configuration file.
+    config_path: str
+
+    # Path to an input file. If not specified, read from the standard input.
+    input: str = "-"
+    # Model name.
+    model: str = "sentence-transformers/LaBSE"
+    # Type of sentence representation.
+    representation: str = choice(
+        *get_registry("sentence_encoder").keys(), default="sbert"
+    )
+
+    # Use fp16.
+    fp16: bool = False
+    # Buffer size to query at a time.
+    buffer_size: int = 128
+    # Transfer the encoder to GPUs.
+    gpu_encode: bool = False
+    # Transfer the retriever to GPUs.
+    gpu_retrieve: bool = False
+    # Number of trials to measure the search time.
+    ntrials: int = 1
+    # Search the top-k nearest neighbor.
+    topk: int = 1
+    # Show the search time in milli seconds instead of seconds.
+    msec: bool = False
+    # Set the efSearch parameter for the HNSW indexes.
+    # This corresponds to the beam width at the search time.
+    efsearch: int = 16
+    # Set the nprobe parameter for the IVF indexes.
+    # This corresponds to the number of neighboring clusters to be searched.
+    nprobe: int = 8
 
 
-def main(args: Namespace) -> None:
+def main(args: Config) -> None:
     logger.info(args)
 
     encoder = SentenceEncoder.build(args.model, args.representation)
     if torch.cuda.is_available() and args.gpu_encode:
-        encoder = encoder.cuda()
         if args.fp16:
             encoder = encoder.half()
-        logger.info(f"The encoder is on the GPU.")
+        encoder = encoder.cuda()
+        logger.info("The encoder is on the GPU.")
 
     retriever_type = load_backend_from_config(args.config_path)
     retriever = retriever_type.load(args.index_path, args.config_path)
@@ -153,7 +152,7 @@ def main(args: Namespace) -> None:
 
 
 def cli_main() -> None:
-    args = parse_args()
+    args = simple_parsing.parse(Config)
     main(args)
 
 

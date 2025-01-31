@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -8,6 +10,7 @@ import torch
 
 from semsis.retriever import register
 from semsis.retriever.faiss_cpu import RetrieverFaissCPU
+from semsis.typing import NDArrayF32, NDArrayFloat, NDArrayI64
 
 logger = logging.getLogger(__name__)
 
@@ -65,34 +68,13 @@ class RetrieverFaissGPU(RetrieverFaissCPU):
         cfg (RetrieverFaissGPU.Config): Configuration dataclass.
     """
 
-    cfg: "RetrieverFaissGPU.Config"
+    cfg: RetrieverFaissGPU.Config
 
-    def __init__(self, index: faiss.Index, cfg: "RetrieverFaissGPU.Config") -> None:
+    def __init__(self, index: faiss.Index, cfg: RetrieverFaissGPU.Config) -> None:
         super().__init__(index, cfg)
         self.A: Optional[torch.Tensor] = None
         self.b: Optional[torch.Tensor] = None
         self.gpu_ivf_index: Optional[ShardedGpuIndex] = None
-
-    @dataclass
-    class Config(RetrieverFaissCPU.Config):
-        """Configuration of the retriever.
-
-        - dim (int): Size of the dimension.
-        - backend (str): Backend of the search engine.
-        - metric (str): Distance function.
-        - hnsw_nlinks (int): [HNSW] Number of links for each node.
-            If this value is greater than 0, HNSW will be used.
-        - ivf_nlists (int): [IVF] Number of centroids.
-        - pq_nblocks (int): [PQ] Number of sub-vectors to be splitted.
-        - pq_nbits (int): [PQ] Size of codebooks for each sub-space.
-            Usually 8 bit is employed; thus, each codebook has 256 codes.
-        - opq (bool): [OPQ] Use OPQ pre-transformation which minimizes the quantization error.
-        - pca (bool): [PCA] Use PCA dimension reduction.
-        - pca_dim (int): [PCA] Dimension size which is reduced by PCA.
-        - fp16 (bool): Use FP16.
-        """
-
-        fp16: bool = False
 
     def to_gpu_train(self) -> None:
         """Transfers the faiss index to GPUs for training.
@@ -196,7 +178,7 @@ class RetrieverFaissGPU(RetrieverFaissCPU):
                 faiss.downcast_index(ivf_index.quantizer).storage
             )
         self.index = faiss_index_to_gpu(self.index, fp16=self.cfg.fp16)
-        logger.info(f"The retriever index is on the GPU.")
+        logger.info("The retriever index is on the GPU.")
 
     def to_cpu(self) -> None:
         """Transfers the faiss index to CPUs."""
@@ -237,7 +219,7 @@ class RetrieverFaissGPU(RetrieverFaissCPU):
             i = j
         return torch.cat(results, dim=0)
 
-    def add_gpu_ivf_index(self, vectors: np.ndarray, ids: np.ndarray) -> None:
+    def add_gpu_ivf_index(self, vectors: NDArrayF32, ids: NDArrayI64) -> None:
         """Adds vectors to the index with the full GPU IVF index.
 
         This method runs as follows:
@@ -249,8 +231,8 @@ class RetrieverFaissGPU(RetrieverFaissCPU):
         5. Empties the storage of the GPU index. Here, the GPU index has only centroids.
 
         Args:
-            vectors (ndarray): Key vectors to be added.
-            ids (np.ndarray): Value indices.
+            vectors (NDArrayF32): Key vectors to be added.
+            ids (NDArrayI64): Value indices.
         """
         ivf: faiss.IndexIVF = faiss.extract_index_ivf(self.index)
         self.gpu_ivf_index.add_with_ids(vectors, ids)
@@ -259,12 +241,12 @@ class RetrieverFaissGPU(RetrieverFaissCPU):
         ivf.merge_from(cpu_ivf_index, 0)
         self.gpu_ivf_index.reset()
 
-    def add(self, vectors: np.ndarray, ids: Optional[np.ndarray] = None) -> None:
+    def add(self, vectors: NDArrayFloat, ids: Optional[NDArrayI64] = None) -> None:
         """Add key vectors to the index.
 
         Args:
-            vectors (np.ndarray): Key vectors to be added.
-            ids (np.ndarray, optional): Value indices.
+            vectors (NDArrayFloat): Key vectors to be added.
+            ids (NDArrayI64, optional): Value indices.
         """
         vectors = self.normalize(vectors)
         if self.cfg.transform:

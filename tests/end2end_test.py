@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import math
 import subprocess
 import sys
@@ -106,18 +107,43 @@ def test_end2end_cli(tmp_path: Path, model: str, representation: str):
         "--config_path",
         cfg_path,
     ]
-
-    # 3. Save the index.
     subprocess.run(index_cmds)
 
-    # 4. Query.
-    encoder = SentenceEncoder.build(model, representation)
-    retriever = RetrieverFaissCPU.load(index_path, cfg_path)
-    query_vectors = encoder.encode(QUERYS).numpy()
-    distances, indices = retriever.search(query_vectors, k=1)
+    # 3. Query.
+    query_path = str(tmp_path / "query.txt")
+    output_path = str(tmp_path / "output.json")
+    search_cmds: list[str] = [
+        sys.executable,
+        "-m",
+        "semsis.cli.query_interactive",
+        "--index_path",
+        index_path,
+        "--config_path",
+        cfg_path,
+        "--input",
+        query_path,
+        "--output",
+        output_path,
+        "--format",
+        "json",
+        "--model",
+        model,
+        "--representation",
+        representation,
+    ]
 
-    assert indices.squeeze(1).tolist() == [2, 0, 2]
-    assert np.isclose(distances[2, 0], 0.0)
+    with open(query_path, mode="w") as f:
+        for query in QUERYS:
+            print(query, file=f)
+
+    subprocess.run(search_cmds)
+
+    with open(output_path, mode="r") as f:
+        for i, line in enumerate(f):
+            res = json.loads(line)
+            assert res["results"][0]["idx"] == [2, 0, 2][i]
+            if i == 2:
+                assert np.isclose(res["results"][0]["distance"], 0.0)
 
 
 if __name__ == "__main__":

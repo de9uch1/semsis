@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import argparse
+import enum
 import fileinput
+import json
 import logging
 import sys
 from collections import defaultdict
@@ -8,7 +11,7 @@ from typing import Generator
 
 import simple_parsing
 import torch
-from simple_parsing.helpers.fields import choice
+from simple_parsing.helpers.fields import choice, field
 
 from semsis.encoder import SentenceEncoder
 from semsis.registry import get_registry
@@ -41,6 +44,11 @@ def buffer_lines(
             yield buf
 
 
+class Format(str, enum.Enum):
+    plain = "plain"
+    json = "json"
+
+
 @dataclass
 class Config:
     """Configuration for query_interactive"""
@@ -52,6 +60,10 @@ class Config:
 
     # Path to an input file. If not specified, read from the standard input.
     input: str = "-"
+    # Path to an output file.
+    output: argparse.FileType("w") = field(default="-")
+    # Output format.
+    format: Format = Format.plain
     # Model name.
     model: str = "sentence-transformers/LaBSE"
     # Type of sentence representation.
@@ -100,6 +112,9 @@ def main(args: Config) -> None:
     logger.info(f"Retriever configuration: {retriever.cfg}")
     logger.info(f"Retriever index size: {len(retriever):,}")
 
+    def _print(string: str):
+        print(string, file=args.output)
+
     timers = defaultdict(Stopwatch)
     ntrials = args.ntrials
     start_id = 0
@@ -109,7 +124,12 @@ def main(args: Config) -> None:
     for lines in buffer_lines(args.input, buffer_size=args.buffer_size):
         timers["encode"].reset()
         timers["retrieve"].reset()
-        for _ in range(ntrials):
+
+        with timers["encode"].measure():
+            querys = encoder.encode(lines).cpu().numpy()
+        with timers["retrieve"].measure():
+            dists, idxs = retriever.search(querys, k=args.topk)
+        for _ in range(ntrials - 1):
             with timers["encode"].measure():
                 querys = encoder.encode(lines).cpu().numpy()
             with timers["retrieve"].measure():
@@ -117,11 +137,26 @@ def main(args: Config) -> None:
 
         for i, line in enumerate(lines):
             uid = start_id + i
-            dist_str = " ".join([f"{x:.3f}" for x in dists[i].tolist()])
-            idx_str = " ".join([str(x) for x in idxs[i].tolist()])
-            print(f"Q-{uid}\t{line}")
-            print(f"D-{uid}\t{dist_str}")
-            print(f"I-{uid}\t{idx_str}")
+
+            # python<=3.9 does not support the match statement.
+            if args.format == Format.plain:
+                dist_str = " ".join([f"{x:.3f}" for x in dists[i].tolist()])
+                idx_str = " ".join([str(x) for x in idxs[i].tolist()])
+                _print(f"Q-{uid}\t{line}")
+                _print(f"D-{uid}\t{dist_str}")
+                _print(f"I-{uid}\t{idx_str}")
+            elif args.format == Format.json:
+                res = {
+                    "i": uid,
+                    "query": line,
+                    "results": [
+                        {"rank": rank, "distance": distance, "idx": idx}
+                        for rank, (distance, idx) in enumerate(
+                            zip(dists[i].tolist(), idxs[i].tolist())
+                        )
+                    ],
+                }
+                _print(json.dumps(res, ensure_ascii=False))
 
         times = {k: timer.total for k, timer in timers.items()}
         times["search"] = sum([timer.total for timer in timers.values()])
@@ -134,8 +169,8 @@ def main(args: Config) -> None:
         for name, c in [("encode", "E"), ("retrieve", "R"), ("search", "S")]:
             t = times[name]
             at = times[name] / ntrials
-            print(f"T{c}-{start_id}:{nqueryed}\t{t:.1f} {unit}")
-            print(f"AT{c}-{start_id}:{nqueryed}\t{at:.1f} {unit}")
+            logger.info(f"T{c}-{start_id}:{nqueryed}\t{t:.1f} {unit}")
+            logger.info(f"AT{c}-{start_id}:{nqueryed}\t{at:.1f} {unit}")
 
         start_id = nqueryed
 
@@ -146,9 +181,11 @@ def main(args: Config) -> None:
         single_avgtimes[k] = v / (nqueryed * ntrials)
 
     for k in acctimes.keys():
-        print(f"Total {k} time: {acctimes[k]:.1f} {unit}")
-        print(f"Average {k} time per batch: {batch_avgtimes[k]:.1f} {unit}")
-        print(f"Average {k} time per single query: {single_avgtimes[k]:.1f} {unit}")
+        logger.info(f"Total {k} time: {acctimes[k]:.1f} {unit}")
+        logger.info(f"Average {k} time per batch: {batch_avgtimes[k]:.1f} {unit}")
+        logger.info(
+            f"Average {k} time per single query: {single_avgtimes[k]:.1f} {unit}"
+        )
 
 
 def cli_main() -> None:

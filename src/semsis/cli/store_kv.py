@@ -88,11 +88,24 @@ def set_pdeathsig(sig: int) -> None:
             libc.prctl(PR_SET_PDEATHSIG, sig)
 
 
+def read_lines(file: StrPath, prefix_string: str = "") -> Generator[str, None, None]:
+    """Read lines.
+
+    Args:
+        file (StrPath): Input file.
+        prefix_string (str): Prefix string to be added for each line.
+    """
+    with open(file, mode="r") as f:
+        for line in f:
+            yield prefix_string + line
+
+
 def prepare_dataset(
     file: StrPath,
     tokenizer: Tokenizer,
     num_workers: int = 1,
     chunk_size: int = 100000,
+    prefix_string: str = "",
 ) -> Dataset:
     """Prepare a dataset.
 
@@ -101,23 +114,28 @@ def prepare_dataset(
         tokenizer (Tokenizer): Tokenizer.
         num_workers (int, optional): Number of workers.
         chunk_size (int): Size of data processed by each process at a time.
+        prefix_string (str): Prefix string.
 
     Returns:
         Dataset: A dataset dataclass.
     """
-    with open(file, mode="r") as f:
-        with concurrent.futures.ProcessPoolExecutor(
+
+    with concurrent.futures.ProcessPoolExecutor(
             max_workers=num_workers,
             initializer=set_pdeathsig,
             initargs=(signal.SIGINT,),
-        ) as executor:
-            sequences = list(
-                tqdm(
-                    executor.map(tokenizer.tokenize, f, chunksize=chunk_size),
-                    desc="Preprocess the data",
-                    mininterval=1,
-                )
+    ) as executor:
+        sequences = list(
+            tqdm(
+                executor.map(
+                    tokenizer.tokenize,
+                    read_lines(file, prefix_string=prefix_string),
+                    chunksize=chunk_size,
+                ),
+                desc="Preprocess the data",
+                mininterval=1,
             )
+        )
 
     return Dataset(sequences, np.array([len(seq) for seq in sequences]))
 
@@ -145,6 +163,10 @@ class Config:
     # Chunk size for multi-processing.
     chunk_size: int = 100000
 
+    # Prefix string.
+    # This option is useful for `intfloat/e5-large`.
+    prefix_string: str = ""
+
 
 def main(args: Config) -> None:
     logger.info(args)
@@ -155,7 +177,13 @@ def main(args: Config) -> None:
 
     logger.info("Start preprocessing the data")
     with timer.measure():
-        dataset = prepare_dataset(args.input, tokenizer, args.workers, args.chunk_size)
+        dataset = prepare_dataset(
+            args.input,
+            tokenizer,
+            args.workers,
+            args.chunk_size,
+            prefix_string=args.prefix_string,
+        )
     logger.info(f"Dataset size: {len(dataset):,}")
     logger.info(f"Preprocessed the data in {timer.total:.1f} seconds.")
 

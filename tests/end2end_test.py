@@ -146,5 +146,87 @@ def test_end2end_cli(tmp_path: Path, model: str, representation: str):
                 assert np.isclose(res["results"][0]["distance"], 0.0)
 
 
+def test_end2end_cli_e5_small_v2(tmp_path: Path):
+    model = "intfloat/e5-small-v2"
+    representation = "sbert"
+
+    # 1. Encode the sentences and store in a key--value store.
+    with open(tmp_path / "text.txt", mode="w") as f:
+        for text in TEXT:
+            print(text, file=f)
+
+    encode_cmds: list[str] = [
+        sys.executable,
+        "-m",
+        "semsis.cli.store_kv",
+        "--input",
+        str(tmp_path / "text.txt"),
+        "--output",
+        str(tmp_path / "kv.bin"),
+        "--model",
+        model,
+        "--representation",
+        representation,
+        "--prefix_string",
+        "passage: ",
+    ]
+    subprocess.run(encode_cmds)
+
+    # 2. Read the KVStore and build the kNN index.
+    index_path = str(tmp_path / "index.bin")
+    cfg_path = str(tmp_path / "cfg.yaml")
+    index_cmds: list[str] = [
+        sys.executable,
+        "-m",
+        "semsis.cli.build_retriever",
+        "--kvstore",
+        str(tmp_path / "kv.bin"),
+        "--index_path",
+        index_path,
+        "--config_path",
+        cfg_path,
+    ]
+    subprocess.run(index_cmds)
+
+    # 3. Query.
+    query_path = str(tmp_path / "query.txt")
+    output_path = str(tmp_path / "output.json")
+    search_cmds: list[str] = [
+        sys.executable,
+        "-m",
+        "semsis.cli.query_interactive",
+        "--index_path",
+        index_path,
+        "--config_path",
+        cfg_path,
+        "--input",
+        query_path,
+        "--output",
+        output_path,
+        "--format",
+        "json",
+        "--model",
+        model,
+        "--representation",
+        representation,
+        "--prefix_string",
+        "query: ",
+    ]
+
+    with open(query_path, mode="w") as f:
+        for query in QUERYS:
+            print(query, file=f)
+
+    subprocess.run(search_cmds)
+
+    with open(output_path, mode="r") as f:
+        for i, line in enumerate(f):
+            res = json.loads(line)
+            assert res["results"][0]["idx"] == [2, 0, 2][i]
+            if i == 2:
+                # `not isclose`: Because prefix_string is asymmetry betweeen the text and query.
+                assert not np.isclose(res["results"][0]["distance"], 0.0)
+
+
 if __name__ == "__main__":
     pytest.main()

@@ -29,14 +29,14 @@ logger = logging.getLogger("semsis.cli.query_interactive")
 
 
 def buffer_lines(
-    input: StrPath, buffer_size: int = 1
+    input: StrPath, buffer_size: int = 1, prefix_string: str = ""
 ) -> Generator[list[str], None, None]:
     buf: list[str] = []
     with fileinput.input(
         [input], mode="r", openhook=fileinput.hook_encoded("utf-8")
     ) as f:
         for line in f:
-            buf.append(line.strip())
+            buf.append(prefix_string + line.strip())
             if len(buf) >= buffer_size:
                 yield buf
                 buf = []
@@ -91,6 +91,9 @@ class Config:
     # Set the nprobe parameter for the IVF indexes.
     # This corresponds to the number of neighboring clusters to be searched.
     nprobe: int = 8
+    # Prefix string.
+    # This option is useful for `intfloat/e5-large`.
+    prefix_string: str = ""
 
 
 def main(args: Config) -> None:
@@ -121,7 +124,9 @@ def main(args: Config) -> None:
     nqueryed = 0
     acctimes = defaultdict(float)
     unit = "msec" if args.msec else "sec"
-    for lines in buffer_lines(args.input, buffer_size=args.buffer_size):
+    for lines in buffer_lines(
+        args.input, buffer_size=args.buffer_size, prefix_string=args.prefix_string
+    ):
         timers["encode"].reset()
         timers["retrieve"].reset()
 

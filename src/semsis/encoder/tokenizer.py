@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Union
 
 from transformers import (
@@ -14,6 +15,11 @@ class Tokenizer:
         self, tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
     ) -> None:
         self.tokenizer = tokenizer
+
+    @property
+    def is_fast(self) -> bool:
+        """Whether the tokenizer is `PreTrainedTokenizerFast` or not."""
+        return self.tokenizer.is_fast
 
     @classmethod
     def build(cls, model_name_or_path: str) -> Tokenizer:
@@ -42,6 +48,25 @@ class Tokenizer:
         return self.tokenizer.encode(
             sentence, add_special_tokens=False, truncation=True
         )
+
+    def tokenize_batch(self, sentences: list[str]) -> list[list[int]]:
+        """Tokenize and convert sentences to their token sequences.
+
+        Args:
+            sentences (list[str]): Input sentences.
+
+        Returns:
+            list[list[int]]: Token ID sequences.
+        """
+        if self.is_fast:
+            return self.tokenizer.batch_encode_plus(
+                sentences,
+                add_special_tokens=False,
+                truncation=True,
+                return_attention_mask=False,
+            )["input_ids"]
+        else:
+            return [self.tokenize(sentence) for sentence in sentences]
 
     def collate(self, samples: list[list[int]]) -> BatchEncoding:
         """Make a mini-batch from samples.
